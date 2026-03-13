@@ -328,15 +328,15 @@ function AddItemModal({ mealName, onClose, onAdd, favourites, customItems }) {
     if (!text.trim()) return;
     setLoading(true); setError(null); setPreview(null);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000,
-          system: `You are a nutrition analyst specialising in Indian food. Return ONLY a valid JSON array (no markdown). CRITICAL: Treat the entire input as one combined dish whenever possible. Only split into multiple items if clearly distinct separate foods. Each object: {"name":string,"kcal":number,"protein":number,"carbs":number,"fat":number}. Integers only. Indian home serving sizes.`,
-          messages: [{ role: "user", content: text }] })
+      const res = await fetch("/api/analyse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
       });
       const data = await res.json();
-      setPreview(JSON.parse(data.content.map(c => c.text || "").join("").replace(/```json|```/g, "").trim()));
-    } catch { setError("Couldn't analyse that. Try rephrasing."); }
+      if (data.error) throw new Error(data.error);
+      setPreview(data.items);
+    } catch (e) { setError("Couldn't analyse that. Please try again."); }
     setLoading(false);
   }
 
@@ -839,14 +839,14 @@ function ProgressTab({ data, targetHistory, habitHistory }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
-      <div style={{ display: "flex", margin: "0 14px 12px", background: C.border, borderRadius: 12, padding: 3, flexShrink: 0 }}>
+      <div style={{ display: "flex", margin: "0 14px 12px", background: C.border, borderRadius: 12, padding: 3, flexShrink: 0, overflow: "hidden" }}>
         {[["diet","Diet"],["habits","Habits"]].map(([id, label]) => (
           <button key={id} onClick={() => setMainTab(id)} style={{ flex: 1, padding: "8px", border: "none", borderRadius: 10, fontFamily: "'DM Sans',sans-serif", fontSize: 13, fontWeight: 500, cursor: "pointer", background: mainTab === id ? C.card : "transparent", color: mainTab === id ? C.accent : C.muted, boxShadow: mainTab === id ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.15s" }}>{label}</button>
         ))}
       </div>
       <div style={{ overflowY: "auto", flex: 1, padding: "0 14px" }}>
         {mainTab === "diet" && <div>
-          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 12, overflow: "hidden" }}>
             {[["calendar","Calendar"],["weekly","Weekly"],["monthly","Monthly"]].map(([id, label]) => (
               <button key={id} onClick={() => setDietView(id)} style={{ flex: 1, padding: "7px", border: `1.5px solid ${dietView === id ? C.accent : C.border}`, borderRadius: 10, fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: dietView === id ? 600 : 400, cursor: "pointer", background: dietView === id ? C.accentLight : C.card, color: dietView === id ? C.accent : C.muted }}>{label}</button>
             ))}
@@ -1252,7 +1252,7 @@ export default function App() {
     <>
       <style>{FONT}</style>
       <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: C.bg, position: "relative", maxWidth: 480, margin: "0 auto" }}>
-          <div style={{ padding: "env(safe-area-inset-top, 44px) 18px 6px", flexShrink: 0, background: C.bg }}>
+          <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 16px) 18px 6px", flexShrink: 0, background: C.bg }}>
             {tab === "home" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{new Date().toLocaleDateString("en",{weekday:"long",month:"short",day:"numeric"})}</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Good morning 👋</p></>}
             {tab === "log" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Meal Log</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>{activeDate === TODAY ? "Today" : formatDate(activeDate)}</p></>}
             {tab === "progress" && <p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Progress</p>}
