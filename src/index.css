@@ -1,0 +1,16 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: #F6F4EF;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+/* Hide scrollbars on filter strips but keep scrolling */
+::-webkit-scrollbar { display: none; }
+* { scrollbar-width: none; }
+/* Prevent text selection on buttons */
+button { -webkit-user-select: none; user-select: none; }
+/* Safe area support */
+body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }

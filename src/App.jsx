@@ -205,7 +205,7 @@ function CalendarPicker({ value, onChange, onClose, minDate, maxDate }) {
   }
 
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 44 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: C.card, borderRadius: 20, padding: "20px", width: 300, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <button onClick={() => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); } else setViewMonth(m => m - 1); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: C.muted, padding: "4px 8px" }}>‹</button>
@@ -257,7 +257,7 @@ function BarcodeModal({ onClose, onAdd }) {
   const sv = parseFloat(servings) || 1;
   const scaled = { name: product.name, kcal: Math.round(product.kcal * sv), protein: Math.round(product.protein * sv), carbs: Math.round(product.carbs * sv), fat: Math.round(product.fat * sv) };
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "flex-end", borderRadius: 44 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
       <div style={{ background: C.card, borderRadius: "24px 24px 0 0", width: "100%", padding: "20px 18px 32px", maxHeight: "88%", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <span style={{ fontFamily: "'Lora',serif", fontSize: 18, color: C.text }}>Scan Barcode</span>
@@ -344,7 +344,7 @@ function AddItemModal({ mealName, onClose, onAdd, favourites, customItems }) {
   if (showBarcode) return <BarcodeScanner onClose={() => setShowBarcode(false)} onAdd={(items) => { onAdd(items, {}); onClose(); }}/>;
 
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 100, display: "flex", alignItems: "flex-end", borderRadius: 44 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
       <div style={{ background: C.card, borderRadius: "24px 24px 0 0", width: "100%", padding: "20px 18px 32px", maxHeight: "88%", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <span style={{ fontFamily: "'Lora',serif", fontSize: 18, color: C.text }}>Add to {mealName}</span>
@@ -422,7 +422,7 @@ function AddMealModal({ onClose, onAdd }) {
   const [name, setName] = useState("");
   const presets = ["Breakfast","Lunch","Dinner","Snack 1","Snack 2","Snack 3","Pre-Workout","Post-Workout","Supper","Brunch"];
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 100, display: "flex", alignItems: "flex-end", borderRadius: 44 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
       <div style={{ background: C.card, borderRadius: "24px 24px 0 0", width: "100%", padding: "22px 18px 32px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <span style={{ fontFamily: "'Lora',serif", fontSize: 19, color: C.text }}>Add a meal</span>
@@ -677,26 +677,28 @@ function HomeTab({ data, date, onNavigate, habitHistory, onToggleHabit, targetHi
           </button>
         ))}
       </div>}
-      {/* Habits */}
-      <div style={{ background: C.card, borderRadius: 15, padding: "14px 14px", border: `1px solid ${C.border}` }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+      {/* Habits - compact 2-col grid */}
+      <div style={{ background: C.card, borderRadius: 15, padding: "14px", border: `1px solid ${C.border}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <p style={{ fontFamily: "'Lora',serif", fontSize: 15, color: C.text, margin: 0 }}>Today's habits</p>
           <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 600, color: completedHabits === habitList.length ? C.green : C.accent }}>{completedHabits}/{habitList.length}</span>
         </div>
         <div style={{ height: 4, background: C.border, borderRadius: 4, marginBottom: 12 }}>
           <div style={{ height: "100%", width: `${habitList.length ? completedHabits / habitList.length * 100 : 0}%`, background: completedHabits === habitList.length ? C.green : C.accent, borderRadius: 4, transition: "width 0.4s" }}/>
         </div>
-        {habitList.map(habit => {
-          const done = !!dayHabits[habit];
-          return (
-            <button key={habit} onClick={() => onToggleHabit(date, habit)} style={{ display: "flex", alignItems: "center", gap: 10, background: done ? C.greenBg : C.bg, border: `1px solid ${done ? C.green : C.border}`, borderRadius: 10, padding: "9px 12px", cursor: "pointer", width: "100%", marginBottom: 6, transition: "all 0.15s" }}>
-              <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${done ? C.green : C.border}`, background: done ? C.green : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.15s" }}>
-                {done && <span style={{ color: "#fff", fontSize: 12, lineHeight: 1 }}>✓</span>}
-              </div>
-              <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: done ? C.green : C.text, fontWeight: done ? 500 : 400, textDecoration: done ? "line-through" : "none", flex: 1, textAlign: "left" }}>{habit}</span>
-            </button>
-          );
-        })}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+          {habitList.map(habit => {
+            const done = !!dayHabits[habit];
+            return (
+              <button key={habit} onClick={() => onToggleHabit(date, habit)} style={{ display: "flex", alignItems: "center", gap: 7, background: done ? C.greenBg : C.bg, border: `1px solid ${done ? C.green : C.border}`, borderRadius: 10, padding: "8px 10px", cursor: "pointer", transition: "all 0.15s", textAlign: "left" }}>
+                <div style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${done ? C.green : C.border}`, background: done ? C.green : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {done && <span style={{ color: "#fff", fontSize: 11, lineHeight: 1 }}>✓</span>}
+                </div>
+                <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: done ? C.green : C.text, fontWeight: done ? 500 : 400, textDecoration: done ? "line-through" : "none", lineHeight: 1.3 }}>{habit}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -910,10 +912,10 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
       {/* Section tabs + 3-dot menu */}
-      <div style={{ display: "flex", alignItems: "center", padding: "0 14px 12px", gap: 6, flexShrink: 0 }}>
-        <div style={{ display: "flex", gap: 5, overflowX: "auto", flex: 1 }}>
+      <div style={{ display: "flex", alignItems: "center", padding: "0 14px 12px", gap: 6, flexShrink: 0, background: C.bg, zIndex: 10 }}>
+        <div style={{ display: "flex", gap: 5, overflowX: "auto", flex: 1, paddingBottom: 2, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
           {sections.map(([id, label]) => (
-            <button key={id} onClick={() => setSection(id)} style={{ flexShrink: 0, padding: "7px 13px", border: `1.5px solid ${section === id ? C.accent : C.border}`, borderRadius: 20, fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: section === id ? 600 : 400, cursor: "pointer", background: section === id ? C.accentLight : C.card, color: section === id ? C.accent : C.muted }}>{label}</button>
+            <button key={id} onClick={() => setSection(id)} style={{ flexShrink: 0, padding: "7px 13px", border: `1.5px solid ${section === id ? C.accent : C.border}`, borderRadius: 20, fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: section === id ? 600 : 400, cursor: "pointer", background: section === id ? C.accentLight : C.card, color: section === id ? C.accent : C.muted, whiteSpace: "nowrap" }}>{label}</button>
           ))}
         </div>
         {/* 3-dot menu */}
@@ -1038,11 +1040,28 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
                 <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.text }}>Include Saturday & Sunday</span>
               </button>
 
-              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.muted, margin: "0 0 10px" }}>Habits in this set (tap × to remove):</p>
+              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.muted, margin: "0 0 10px" }}>Drag ☰ to reorder · tap × to remove:</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-                {editHabits.map(h => (
-                  <div key={h} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.bg, borderRadius: 10, padding: "9px 13px" }}>
-                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.text }}>{h}</span>
+                {editHabits.map((h, idx) => (
+                  <div key={h}
+                    draggable
+                    onDragStart={e => { e.dataTransfer.setData("text/plain", idx); }}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => {
+                      e.preventDefault();
+                      const from = parseInt(e.dataTransfer.getData("text/plain"));
+                      const to = idx;
+                      if (from === to) return;
+                      setEditHabits(hs => {
+                        const arr = [...hs];
+                        const [moved] = arr.splice(from, 1);
+                        arr.splice(to, 0, moved);
+                        return arr;
+                      });
+                    }}
+                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.bg, borderRadius: 10, padding: "9px 13px", cursor: "grab", userSelect: "none" }}>
+                    <span style={{ color: C.muted, fontSize: 16, marginRight: 8, cursor: "grab" }}>☰</span>
+                    <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.text, flex: 1 }}>{h}</span>
                     <button onClick={() => setEditHabits(hs => hs.filter(x => x !== h))} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 16 }}>×</button>
                   </div>
                 ))}
@@ -1108,7 +1127,7 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
 
       {/* Create custom meal */}
       {showCreate && (
-        <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 110, display: "flex", alignItems: "flex-end", borderRadius: 44 }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 110, display: "flex", alignItems: "flex-end" }}>
           <div style={{ background: C.card, borderRadius: "24px 24px 0 0", width: "100%", padding: "22px 18px 32px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <span style={{ fontFamily: "'Lora',serif", fontSize: 19, color: C.text }}>New custom meal</span>
@@ -1121,7 +1140,7 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
 
       {/* History modals */}
       {showHistoryModal && (
-        <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 120, display: "flex", alignItems: "flex-end", borderRadius: 44 }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 120, display: "flex", alignItems: "flex-end" }}>
           <div style={{ background: C.card, borderRadius: "24px 24px 0 0", width: "100%", padding: "22px 18px 32px", maxHeight: "80%", display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <span style={{ fontFamily: "'Lora',serif", fontSize: 19, color: C.text }}>{showHistoryModal === "nutrition" ? "Nutrition target history" : "Habit set history"}</span>
@@ -1232,14 +1251,9 @@ export default function App() {
   return (
     <>
       <style>{FONT}</style>
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", background: "#D0CDC5", padding: 20 }}>
-        <div style={{ width: 390, height: 812, background: C.bg, borderRadius: 44, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 40px 100px rgba(0,0,0,0.35), 0 0 0 10px #111", position: "relative" }}>
-          <div style={{ padding: "16px 28px 0", display: "flex", justifyContent: "space-between", flexShrink: 0 }}>
-            <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, fontWeight: 600, color: C.text }}>9:41</span>
-            <span style={{ fontSize: 11, color: C.text }}>●●● ▲ 🔋</span>
-          </div>
-          <div style={{ padding: "6px 18px 10px", flexShrink: 0 }}>
-            {tab === "home" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Monday, Mar 10</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Good morning 👋</p></>}
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: C.bg, position: "relative", maxWidth: 480, margin: "0 auto" }}>
+          <div style={{ padding: "env(safe-area-inset-top, 44px) 18px 6px", flexShrink: 0, background: C.bg }}>
+            {tab === "home" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{new Date().toLocaleDateString("en",{weekday:"long",month:"short",day:"numeric"})}</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Good morning 👋</p></>}
             {tab === "log" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Meal Log</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>{activeDate === TODAY ? "Today" : formatDate(activeDate)}</p></>}
             {tab === "progress" && <p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Progress</p>}
             {tab === "hub" && <p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Hub</p>}
@@ -1250,7 +1264,7 @@ export default function App() {
             {tab === "progress" && <ProgressTab data={data} targetHistory={targetHistory} habitHistory={habitHistory}/>}
             {tab === "hub" && <HubTab targetHistory={targetHistory} setTargetHistory={setTargetHistory} habitHistory={habitHistory} setHabitHistory={setHabitHistory} favourites={favourites} customItems={customItems} onDeleteFav={id => setFavourites(f => f.filter(x => x.id !== id))} onDeleteCustom={id => setCustomItems(c => c.filter(x => x.id !== id))} onCreateCustom={item => setCustomItems(c => [...c, item])}/>}
           </div>
-          <div style={{ display: "flex", background: C.card, borderTop: `1px solid ${C.border}`, padding: "10px 0 20px", flexShrink: 0 }}>
+          <div style={{ display: "flex", background: C.card, borderTop: `1px solid ${C.border}`, padding: "10px 0 env(safe-area-inset-bottom, 20px)", flexShrink: 0 }}>
             {tabs.map(t => { const active = tab === t.id; return (
               <button key={t.id} onClick={() => setTab(t.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 0" }}>
                 {t.icon(active)}
@@ -1259,7 +1273,6 @@ export default function App() {
               </button>
             ); })}
           </div>
-        </div>
       </div>
     </>
   );
