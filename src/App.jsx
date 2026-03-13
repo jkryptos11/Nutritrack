@@ -1,3 +1,4 @@
+// NutriTrack v8.1 - fixes: modal, tabs, no seed data
 import { useState, useEffect, useRef } from "react";
 import { load, save } from './storage.js';
 import BarcodeScanner from './BarcodeScanner.jsx';
