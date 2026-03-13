@@ -1,4 +1,4 @@
-// NutriTrack v8.1 - fixes: modal, tabs, no seed data
+// NutriTrack v8.2 - ROOT FIX: stable meal IDs
 import { useState, useEffect, useRef } from "react";
 import { load, save } from './storage.js';
 import BarcodeScanner from './BarcodeScanner.jsx';
@@ -492,7 +492,17 @@ function LogTab({ data, activeDate, setActiveDate, onDataChange, favourites, cus
   const [addItemMealId, setAddItemMealId] = useState(null);
   const [showAddMeal, setShowAddMeal] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
-  const dayData = data[activeDate] || makeFreshDay();
+
+  // Ensure today always has stable meal IDs in data - never use makeFreshDay() inline
+  useEffect(() => {
+    if (!data[activeDate]) {
+      const newData = JSON.parse(JSON.stringify(data));
+      newData[activeDate] = makeFreshDay();
+      onDataChange(newData);
+    }
+  }, [activeDate]);
+
+  const dayData = data[activeDate] || { meals: [], habits: {} };
   const activeTarget = getActiveTarget(targetHistory, activeDate);
   const all = dayData.meals.flatMap(m => m.items);
 
