@@ -96,7 +96,9 @@ function makeFreshDay() {
 
 function seedData() {
   const data = {};
-  ["2026-03-04","2026-03-05","2026-03-06","2026-03-07","2026-03-08","2026-03-09","2026-03-10"].forEach((d, i) => {
+  const todayD = new Date(); todayD.setHours(0,0,0,0);
+  const past7 = Array.from({length:7},(_,i)=>{ const d=new Date(todayD); d.setDate(d.getDate()-(6-i)); return d.toISOString().split("T")[0]; });
+  past7.forEach((d, i) => {
     const kcal = 1700 + Math.round(Math.random() * 600);
     const protein = 80 + Math.round(Math.random() * 60);
     data[d] = {
@@ -496,7 +498,7 @@ function LogTab({ data, activeDate, setActiveDate, onDataChange, favourites, cus
   // 7 recent dates
   const recentDates = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date("2026-03-10"); d.setDate(d.getDate() - i);
+    const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - i);
     recentDates.push(toDateStr(d));
   }
 
@@ -841,14 +843,14 @@ function ProgressTab({ data, targetHistory, habitHistory }) {
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
       <div style={{ display: "flex", margin: "0 14px 12px", background: C.border, borderRadius: 12, padding: 3, flexShrink: 0, overflow: "hidden" }}>
         {[["diet","Diet"],["habits","Habits"]].map(([id, label]) => (
-          <button key={id} onClick={() => setMainTab(id)} style={{ flex: 1, padding: "8px", border: "none", borderRadius: 10, fontFamily: "'DM Sans',sans-serif", fontSize: 13, fontWeight: 500, cursor: "pointer", background: mainTab === id ? C.card : "transparent", color: mainTab === id ? C.accent : C.muted, boxShadow: mainTab === id ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.15s" }}>{label}</button>
+          <button key={id} onClick={() => setMainTab(id)} style={{ flex: 1, padding: "8px", border: "none", borderRadius: 10, fontFamily: "'DM Sans',sans-serif", fontSize: 13, fontWeight: 500, cursor: "pointer", background: mainTab === id ? C.card : "transparent", color: mainTab === id ? C.accent : C.muted, boxShadow: mainTab === id ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.15s", minWidth: 0 }}>{label}</button>
         ))}
       </div>
       <div style={{ overflowY: "auto", flex: 1, padding: "0 14px" }}>
         {mainTab === "diet" && <div>
           <div style={{ display: "flex", gap: 6, marginBottom: 12, overflow: "hidden" }}>
             {[["calendar","Calendar"],["weekly","Weekly"],["monthly","Monthly"]].map(([id, label]) => (
-              <button key={id} onClick={() => setDietView(id)} style={{ flex: 1, padding: "7px", border: `1.5px solid ${dietView === id ? C.accent : C.border}`, borderRadius: 10, fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: dietView === id ? 600 : 400, cursor: "pointer", background: dietView === id ? C.accentLight : C.card, color: dietView === id ? C.accent : C.muted }}>{label}</button>
+              <button key={id} onClick={() => setDietView(id)} style={{ flex: 1, padding: "7px 4px", border: `1.5px solid ${dietView === id ? C.accent : C.border}`, borderRadius: 10, fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: dietView === id ? 600 : 400, cursor: "pointer", background: dietView === id ? C.accentLight : C.card, color: dietView === id ? C.accent : C.muted, minWidth: 0 }}>{label}</button>
             ))}
           </div>
           {dietView === "calendar" && <div><div style={{ background: C.card, borderRadius: 14, padding: "14px", border: `1px solid ${C.border}`, marginBottom: 12 }}><p style={{ fontFamily: "'Lora',serif", fontSize: 14, color: C.text, margin: "0 0 12px" }}>March 2026</p><CalendarGrid/></div>{selectedDay && <DayDetail dateStr={selectedDay}/>}</div>}
@@ -915,7 +917,7 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
       <div style={{ display: "flex", alignItems: "center", padding: "0 14px 12px", gap: 6, flexShrink: 0, background: C.bg, zIndex: 10 }}>
         <div style={{ display: "flex", gap: 5, overflowX: "auto", flex: 1, paddingBottom: 2, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
           {sections.map(([id, label]) => (
-            <button key={id} onClick={() => setSection(id)} style={{ flexShrink: 0, padding: "7px 13px", border: `1.5px solid ${section === id ? C.accent : C.border}`, borderRadius: 20, fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: section === id ? 600 : 400, cursor: "pointer", background: section === id ? C.accentLight : C.card, color: section === id ? C.accent : C.muted, whiteSpace: "nowrap" }}>{label}</button>
+            <button key={id} onClick={() => setSection(id)} style={{ flexShrink: 0, padding: "6px 11px", border: `1.5px solid ${section === id ? C.accent : C.border}`, borderRadius: 20, fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: section === id ? 600 : 400, cursor: "pointer", background: section === id ? C.accentLight : C.card, color: section === id ? C.accent : C.muted, whiteSpace: "nowrap" }}>{label}</button>
           ))}
         </div>
         {/* 3-dot menu */}
@@ -1214,7 +1216,7 @@ function CreateCustomForm({ onSave }) {
 // ── Root ───────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("home");
-  const [data, setData] = useState(() => load("data", seedData()));
+  const [data, setData] = useState(() => load("data", {}));
   const [activeDate, setActiveDate] = useState(TODAY);
   const [favourites, setFavourites] = useState(() => load("favourites", []));
   const [customItems, setCustomItems] = useState(() => load("customItems", [{ id: "c1", name: "MuscleBlaze Whey — 1 scoop with water", kcal: 120, protein: 25, carbs: 3, fat: 2, isCustom: true }]));
