@@ -1,4 +1,4 @@
-// NutriTrack v8.2 - ROOT FIX: stable meal IDs
+// NutriTrack v8.3 - layout + AI Search + calendar fixes
 import { useState, useEffect, useRef } from "react";
 import { load, save } from './storage.js';
 import BarcodeScanner from './BarcodeScanner.jsx';
@@ -729,9 +729,11 @@ function ProgressTab({ data, targetHistory, habitHistory }) {
 
   function CalendarGrid() {
     const cells = [];
-    const firstDay = new Date(2026, 2, 1).getDay();
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).getDay();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     for (let i = 0; i < firstDay; i++) cells.push(null);
-    for (let d = 1; d <= 31; d++) cells.push(d);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
     return (
       <div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, marginBottom: 4 }}>
@@ -740,7 +742,8 @@ function ProgressTab({ data, targetHistory, habitHistory }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3 }}>
           {cells.map((d, i) => {
             if (!d) return <div key={i}/>;
-            const dateStr = `2026-03-${String(d).padStart(2, "0")}`;
+            const now2 = new Date();
+            const dateStr = `${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
             const dayData = data[dateStr];
             const all = dayData ? dayData.meals.flatMap(m => m.items) : [];
             const kcal = sum(all, "kcal");
@@ -864,7 +867,7 @@ function ProgressTab({ data, targetHistory, habitHistory }) {
               <button key={id} onClick={() => setDietView(id)} style={{ flex: 1, padding: "7px 4px", border: `1.5px solid ${dietView === id ? C.accent : C.border}`, borderRadius: 10, fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: dietView === id ? 600 : 400, cursor: "pointer", background: dietView === id ? C.accentLight : C.card, color: dietView === id ? C.accent : C.muted, minWidth: 0 }}>{label}</button>
             ))}
           </div>
-          {dietView === "calendar" && <div><div style={{ background: C.card, borderRadius: 14, padding: "14px", border: `1px solid ${C.border}`, marginBottom: 12 }}><p style={{ fontFamily: "'Lora',serif", fontSize: 14, color: C.text, margin: "0 0 12px" }}>March 2026</p><CalendarGrid/></div>{selectedDay && <DayDetail dateStr={selectedDay}/>}</div>}
+          {dietView === "calendar" && <div><div style={{ background: C.card, borderRadius: 14, padding: "14px", border: `1px solid ${C.border}`, marginBottom: 12 }}><p style={{ fontFamily: "'Lora',serif", fontSize: 14, color: C.text, margin: "0 0 12px" }}>{new Date().toLocaleDateString('en',{month:'long',year:'numeric'})}</p><CalendarGrid/></div>{selectedDay && <DayDetail dateStr={selectedDay}/>}</div>}
           {dietView === "weekly" && <BarChart period="weekly"/>}
           {dietView === "monthly" && <BarChart period="monthly"/>}
         </div>}
@@ -1264,7 +1267,7 @@ export default function App() {
   return (
     <>
       <style>{FONT}</style>
-      <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: C.bg, position: "relative", maxWidth: 480, margin: "0 auto" }}>
+      <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: C.bg, position: "relative", maxWidth: 480, margin: "0 auto", overflow: "hidden" }}>
           <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 16px) 18px 6px", flexShrink: 0, background: C.bg }}>
             {tab === "home" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{new Date().toLocaleDateString("en",{weekday:"long",month:"short",day:"numeric"})}</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Good morning 👋</p></>}
             {tab === "log" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Meal Log</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>{activeDate === TODAY ? "Today" : formatDate(activeDate)}</p></>}
