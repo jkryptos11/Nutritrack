@@ -928,7 +928,7 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative", width: "100%" }}>
-      {/* Section tabs + 3-dot menu */
+      {/* Section tabs + 3-dot menu */}
       <div style={{ display: "flex", alignItems: "center", padding: "0 14px 12px", gap: 6, flexShrink: 0, background: C.bg, zIndex: 10, width: "100%" }}>
         <div style={{ display: "flex", gap: 5, overflowX: "auto", flex: 1, paddingBottom: 2, WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none" }}>
           {sections.map(([id, label]) => (
@@ -953,7 +953,7 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
       </div>
 
       <div style={{ overflowY: "auto", flex: 1, padding: "0 14px", width: "100%", boxSizing: "border-box" }}>
-        {/* ── Targets section ── */
+        {/* ── Targets section ── */}
         {section === "targets" && (
           <div>
             {/* Active target preview */}
