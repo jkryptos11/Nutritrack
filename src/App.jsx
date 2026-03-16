@@ -345,7 +345,11 @@ function AddItemModal({ mealName, onClose, onAdd, favourites, customItems }) {
   }
 
   const allSaved = [...customItems.map(i => ({ ...i, _type: "custom" })), ...favourites.map(i => ({ ...i, _type: "fav" }))];
-  if (showBarcode) return <BarcodeScanner onClose={() => setShowBarcode(false)} onAdd={(items) => { onAdd(items, {}); onClose(); }}/>;
+  if (showBarcode) return <BarcodeScanner
+    onClose={() => setShowBarcode(false)}
+    onAdd={(items) => { onAdd(items, {}); onClose(); }}
+    onManualAI={(name) => { setShowBarcode(false); setText(name); setActiveTab('ai'); }}
+  />;
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
