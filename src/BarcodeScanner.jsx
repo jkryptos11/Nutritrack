@@ -31,22 +31,114 @@ async function lookupBarcode(code) {
 
 export default function BarcodeScanner({ onClose, onAdd }) {
   const videoRef = useRef(null)
+  const canvasRef = useRef(null)
+  const streamRef = useRef(null)
   const readerRef = useRef(null)
-  const animRef = useRef(null)
+  const intervalRef = useRef(null)
+  const foundRef = useRef(false)
+
   const [phase, setPhase] = useState('scanning')
   const [product, setProduct] = useState(null)
   const [servings, setServings] = useState('1')
   const [lookingUp, setLookingUp] = useState(false)
   const [notFound, setNotFound] = useState(false)
   const [camError, setCamError] = useState(null)
-  const foundRef = useRef(false)
+  const [lastCode, setLastCode] = useState('')
 
   useEffect(() => {
-    let stream = null
+    const hints = new Map()
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
+      BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
+      BarcodeFormat.CODE_128, BarcodeFormat.QR_CODE,
+    ])
+    hints.set(DecodeHintType.TRY_HARDER, true)
+    readerRef.current = new BrowserMultiFormatReader(hints)
 
-    async function startScanner() {
+    async function startCamera() {
       try {
-        // Try environment camera first, fall back to any camera
+        // Try exact environment first, fall back to ideal
+        let stream
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          })
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+          })
+        }
+        streamRef.current = stream
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+
+        // Wait for video to be ready then start scanning every 300ms
+        videoRef.current.addEventListener('loadeddata', startScanning)
+      } catch (err) {
+        setCamError(
+          err.name === 'NotAllowedError' ? 'Camera permission denied. Allow camera access and try again.' :
+          err.name === 'NotFoundError' ? 'No camera found on this device.' :
+          `Camera error: ${err.message}`
+        )
+      }
+    }
+
+    function startScanning() {
+      if (intervalRef.current) return
+      intervalRef.current = setInterval(() => {
+        if (foundRef.current) return
+        const video = videoRef.current
+        const canvas = canvasRef.current
+        if (!video || !canvas || video.readyState < 2) return
+        const ctx = canvas.getContext('2d')
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        try {
+          const result = readerRef.current.decodeFromCanvas(canvas)
+          if (result) {
+            foundRef.current = true
+            clearInterval(intervalRef.current)
+            stopCamera()
+            const code = result.getText()
+            setLastCode(code)
+            setLookingUp(true)
+            lookupBarcode(code).then(found => {
+              setLookingUp(false)
+              if (found) { setProduct(found); setPhase('found') }
+              else setNotFound(true)
+            })
+          }
+        } catch {}
+      }, 300)
+    }
+
+    startCamera()
+
+    return () => {
+      clearInterval(intervalRef.current)
+      stopCamera()
+    }
+  }, [])
+
+  function stopCamera() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+  }
+
+  function retry() {
+    foundRef.current = false
+    setNotFound(false)
+    setPhase('scanning')
+    setLastCode('')
+    clearInterval(intervalRef.current)
+    intervalRef.current = null
+    // Restart camera
+    async function restartCamera() {
+      try {
+        let stream
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
@@ -54,64 +146,39 @@ export default function BarcodeScanner({ onClose, onAdd }) {
         } catch {
           stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
         }
-
-        if (!videoRef.current) return
+        streamRef.current = stream
         videoRef.current.srcObject = stream
         await videoRef.current.play()
-
-        const hints = new Map()
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-          BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
-          BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
-          BarcodeFormat.CODE_128, BarcodeFormat.QR_CODE,
-        ])
-        hints.set(DecodeHintType.TRY_HARDER, true)
-
-        readerRef.current = new BrowserMultiFormatReader(hints)
-
-        // Use continuous decode loop instead of deprecated decodeFromStream
-        async function scanLoop() {
-          if (foundRef.current || !videoRef.current) return
-          try {
-            const result = await readerRef.current.decodeFromVideoElement(videoRef.current)
-            if (result && !foundRef.current) {
-              foundRef.current = true
-              if (stream) stream.getTracks().forEach(t => t.stop())
-              setLookingUp(true)
-              const found = await lookupBarcode(result.getText())
-              setLookingUp(false)
-              if (found) { setProduct(found); setPhase('found') }
-              else setNotFound(true)
-              return
-            }
-          } catch {}
-          animRef.current = requestAnimationFrame(scanLoop)
-        }
-        scanLoop()
-
-      } catch (err) {
-        setCamError(
-          err.name === 'NotAllowedError'
-            ? 'Camera permission denied. Please allow camera access in your browser settings.'
-            : err.name === 'NotFoundError'
-            ? 'No camera found on this device.'
-            : `Camera error: ${err.message}`
-        )
-      }
+        videoRef.current.addEventListener('loadeddata', () => {
+          intervalRef.current = setInterval(() => {
+            if (foundRef.current) return
+            const video = videoRef.current
+            const canvas = canvasRef.current
+            if (!video || !canvas || video.readyState < 2) return
+            const ctx = canvas.getContext('2d')
+            canvas.width = video.videoWidth
+            canvas.height = video.videoHeight
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+            try {
+              const result = readerRef.current.decodeFromCanvas(canvas)
+              if (result) {
+                foundRef.current = true
+                clearInterval(intervalRef.current)
+                stopCamera()
+                setLookingUp(true)
+                lookupBarcode(result.getText()).then(found => {
+                  setLookingUp(false)
+                  if (found) { setProduct(found); setPhase('found') }
+                  else setNotFound(true)
+                })
+              }
+            } catch {}
+          }, 300)
+        })
+      } catch (err) { setCamError(`Camera error: ${err.message}`) }
     }
-
-    startScanner()
-
-    return () => {
-      foundRef.current = true
-      if (animRef.current) cancelAnimationFrame(animRef.current)
-      try { readerRef.current?.reset() } catch {}
-      if (stream) stream.getTracks().forEach(t => t.stop())
-      if (videoRef.current?.srcObject) {
-        videoRef.current.srcObject.getTracks().forEach(t => t.stop())
-      }
-    }
-  }, [])
+    restartCamera()
+  }
 
   const sv = parseFloat(servings) || 1
   const scaled = product ? {
@@ -124,28 +191,34 @@ export default function BarcodeScanner({ onClose, onAdd }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 200, display: 'flex', flexDirection: 'column' }}>
+      {/* Hidden canvas for frame capture */}
+      <canvas ref={canvasRef} style={{ display: 'none' }}/>
+
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted autoPlay/>
 
         {!camError && phase === 'scanning' && !lookingUp && !notFound && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            <style>{`@keyframes scanline{0%{top:10%}100%{top:85%}}`}</style>
+            <style>{`@keyframes scanline{0%{top:5%}100%{top:88%}}`}</style>
             <div style={{ width: 260, height: 160, position: 'relative' }}>
               {[[0,0],[0,1],[1,0],[1,1]].map(([r,c],i) => (
-                <div key={i} style={{ position:'absolute', top:r?'auto':0, bottom:r?0:'auto', left:c?'auto':0, right:c?0:'auto', width:32, height:32, borderTop:r?'none':`3px solid ${C.accent}`, borderBottom:r?`3px solid ${C.accent}`:'none', borderLeft:c?'none':`3px solid ${C.accent}`, borderRight:c?`3px solid ${C.accent}`:'none', borderRadius: r===0&&c===0?'4px 0 0 0':r===0&&c===1?'0 4px 0 0':r===1&&c===0?'0 0 0 4px':'0 0 4px 0' }}/>
+                <div key={i} style={{ position:'absolute', top:r?'auto':0, bottom:r?0:'auto', left:c?'auto':0, right:c?0:'auto', width:32, height:32,
+                  borderTop: r?'none':`3px solid ${C.accent}`, borderBottom: r?`3px solid ${C.accent}`:'none',
+                  borderLeft: c?'none':`3px solid ${C.accent}`, borderRight: c?`3px solid ${C.accent}`:'none' }}/>
               ))}
               <div style={{ position:'absolute', left:4, right:4, height:2, background:`${C.accent}CC`, animation:'scanline 2s ease-in-out infinite alternate', boxShadow:`0 0 8px ${C.accent}` }}/>
             </div>
             <div style={{ marginTop:20, background:'rgba(0,0,0,0.6)', borderRadius:10, padding:'8px 20px' }}>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:'rgba(255,255,255,0.9)', margin:0 }}>Point camera at barcode</p>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:'rgba(255,255,255,0.9)', margin:0 }}>Point at barcode and hold steady</p>
             </div>
           </div>
         )}
 
         {lookingUp && (
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <div style={{ background:'rgba(0,0,0,0.8)', borderRadius:16, padding:'24px 32px', textAlign:'center' }}>
+            <div style={{ background:'rgba(0,0,0,0.85)', borderRadius:16, padding:'24px 32px', textAlign:'center' }}>
               <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:16, color:'#fff', margin:'0 0 6px', fontWeight:600 }}>Barcode detected!</p>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.6)', margin:'0 0 4px' }}>Code: {lastCode}</p>
               <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:'rgba(255,255,255,0.6)', margin:0 }}>Looking up product…</p>
             </div>
           </div>
@@ -164,14 +237,16 @@ export default function BarcodeScanner({ onClose, onAdd }) {
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
             <div style={{ background:'rgba(0,0,0,0.9)', borderRadius:16, padding:'24px 20px', textAlign:'center' }}>
               <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color:'#fff', margin:'0 0 8px', fontWeight:600 }}>Product not found</p>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.6)', margin:'0 0 16px' }}>Not in the Open Food Facts database</p>
-              <button onClick={() => { foundRef.current = false; setNotFound(false); setPhase('scanning'); }} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:10, padding:'10px 20px', fontFamily:"'DM Sans',sans-serif", fontSize:13, cursor:'pointer', marginRight:8 }}>Try again</button>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.6)', margin:'0 0 4px' }}>Code: {lastCode}</p>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.6)', margin:'0 0 16px' }}>Not in Open Food Facts database</p>
+              <button onClick={retry} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:10, padding:'10px 20px', fontFamily:"'DM Sans',sans-serif", fontSize:13, cursor:'pointer', marginRight:8 }}>Try again</button>
               <button onClick={onClose} style={{ background:'rgba(255,255,255,0.15)', color:'#fff', border:'none', borderRadius:10, padding:'10px 20px', fontFamily:"'DM Sans',sans-serif", fontSize:13, cursor:'pointer' }}>Cancel</button>
             </div>
           </div>
         )}
 
-        <button onClick={onClose} style={{ position:'absolute', top:16, right:16, width:40, height:40, borderRadius:20, background:'rgba(0,0,0,0.6)', border:'1.5px solid rgba(255,255,255,0.3)', cursor:'pointer', fontSize:22, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10 }}>×</button>
+        <button onClick={() => { clearInterval(intervalRef.current); stopCamera(); onClose(); }}
+          style={{ position:'absolute', top:16, right:16, width:40, height:40, borderRadius:20, background:'rgba(0,0,0,0.6)', border:'1.5px solid rgba(255,255,255,0.3)', cursor:'pointer', fontSize:22, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10 }}>×</button>
       </div>
 
       {phase === 'found' && product && (
@@ -195,7 +270,8 @@ export default function BarcodeScanner({ onClose, onAdd }) {
             {['0.5','1','1.5','2'].map(s => (
               <button key={s} onClick={() => setServings(s)} style={{ flex:1, padding:'9px 4px', border:`1.5px solid ${servings===s?C.accent:C.border}`, borderRadius:10, background:servings===s?C.accentLight:C.bg, color:servings===s?C.accent:C.muted, fontFamily:"'DM Sans',sans-serif", fontSize:14, fontWeight:servings===s?600:400, cursor:'pointer' }}>{s}</button>
             ))}
-            <input type="number" value={servings} onChange={e => setServings(e.target.value)} min="0.1" step="0.5" style={{ flex:1, padding:'9px 4px', border:`1.5px solid ${C.border}`, borderRadius:10, background:C.bg, fontFamily:"'DM Sans',sans-serif", fontSize:13, color:C.text, outline:'none', textAlign:'center' }}/>
+            <input type="number" value={servings} onChange={e => setServings(e.target.value)} min="0.1" step="0.5"
+              style={{ flex:1, padding:'9px 4px', border:`1.5px solid ${C.border}`, borderRadius:10, background:C.bg, fontFamily:"'DM Sans',sans-serif", fontSize:13, color:C.text, outline:'none', textAlign:'center' }}/>
           </div>
           {scaled && (
             <div style={{ background:C.accentLight, borderRadius:11, padding:'10px 13px', marginBottom:14 }}>
@@ -208,7 +284,8 @@ export default function BarcodeScanner({ onClose, onAdd }) {
               </div>
             </div>
           )}
-          <button onClick={() => { onAdd([scaled]); onClose(); }} style={{ width:'100%', background:C.accent, color:'#fff', border:'none', borderRadius:13, padding:'14px', fontFamily:"'DM Sans',sans-serif", fontSize:15, fontWeight:600, cursor:'pointer' }}>Add to meal</button>
+          <button onClick={() => { onAdd([scaled]); onClose(); }}
+            style={{ width:'100%', background:C.accent, color:'#fff', border:'none', borderRadius:13, padding:'14px', fontFamily:"'DM Sans',sans-serif", fontSize:15, fontWeight:600, cursor:'pointer' }}>Add to meal</button>
         </div>
       )}
     </div>
