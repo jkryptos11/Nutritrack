@@ -1,4 +1,4 @@
-// NutriTrack v8.3 - layout + AI Search + calendar fixes
+// NutriTrack v8.4 - definitive fixes
 import { useState, useEffect, useRef } from "react";
 import { load, save } from './storage.js';
 import BarcodeScanner from './BarcodeScanner.jsx';
@@ -190,8 +190,9 @@ function NutritionTable({ items, onDeleteItem }) {
 
 // ── Mini Calendar Picker ───────────────────────────────
 function CalendarPicker({ value, onChange, onClose, minDate, maxDate }) {
-  const [viewYear, setViewYear] = useState(2026);
-  const [viewMonth, setViewMonth] = useState(2); // 0-indexed, 2 = March
+  const now = new Date();
+  const [viewYear, setViewYear] = useState(now.getFullYear());
+  const [viewMonth, setViewMonth] = useState(now.getMonth()); // 0-indexed
   const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const firstDay = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
@@ -928,8 +929,8 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
       {/* Section tabs + 3-dot menu */}
-      <div style={{ display: "flex", alignItems: "center", padding: "0 14px 12px", gap: 6, flexShrink: 0, background: C.bg, zIndex: 10 }}>
-        <div style={{ display: "flex", gap: 5, overflowX: "auto", flex: 1, paddingBottom: 2, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
+      <div style={{ display: "flex", alignItems: "center", padding: "0 14px 12px", gap: 6, flexShrink: 0, background: C.bg, zIndex: 10, width: "100%" }}>
+        <div style={{ display: "flex", gap: 5, overflowX: "auto", flex: 1, paddingBottom: 2, WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none" }}>
           {sections.map(([id, label]) => (
             <button key={id} onClick={() => setSection(id)} style={{ flexShrink: 0, padding: "6px 11px", border: `1.5px solid ${section === id ? C.accent : C.border}`, borderRadius: 20, fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: section === id ? 600 : 400, cursor: "pointer", background: section === id ? C.accentLight : C.card, color: section === id ? C.accent : C.muted, whiteSpace: "nowrap" }}>{label}</button>
           ))}
@@ -1267,7 +1268,7 @@ export default function App() {
   return (
     <>
       <style>{FONT}</style>
-      <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: C.bg, position: "relative", maxWidth: 480, margin: "0 auto", overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", background: C.bg, position: "relative", maxWidth: 480, margin: "0 auto", overflow: "hidden" }}>
           <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 16px) 18px 6px", flexShrink: 0, background: C.bg }}>
             {tab === "home" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{new Date().toLocaleDateString("en",{weekday:"long",month:"short",day:"numeric"})}</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Good morning 👋</p></>}
             {tab === "log" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Meal Log</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>{activeDate === TODAY ? "Today" : formatDate(activeDate)}</p></>}
