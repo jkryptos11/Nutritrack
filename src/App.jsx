@@ -1,4 +1,4 @@
-// NutriTrack v8.5 - layout chain fix
+// NutriTrack v8.6 - hub width + progress flex fix
 import { useState, useEffect, useRef } from "react";
 import { load, save } from './storage.js';
 import BarcodeScanner from './BarcodeScanner.jsx';
@@ -855,7 +855,7 @@ function ProgressTab({ data, targetHistory, habitHistory }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
       <div style={{ display: "flex", margin: "0 14px 12px", background: C.border, borderRadius: 12, padding: 3, flexShrink: 0, overflow: "hidden" }}>
         {[["diet","Diet"],["habits","Habits"]].map(([id, label]) => (
           <button key={id} onClick={() => setMainTab(id)} style={{ flex: 1, padding: "8px", border: "none", borderRadius: 10, fontFamily: "'DM Sans',sans-serif", fontSize: 13, fontWeight: 500, cursor: "pointer", background: mainTab === id ? C.card : "transparent", color: mainTab === id ? C.accent : C.muted, boxShadow: mainTab === id ? "0 1px 4px rgba(0,0,0,0.08)" : "none", transition: "all 0.15s", minWidth: 0 }}>{label}</button>
@@ -927,8 +927,8 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
   const sections = [["targets","Targets"],["habits","Habits"],["custom","Custom Meals"],["favs","Favourites"]];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative" }}>
-      {/* Section tabs + 3-dot menu */}
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative", width: "100%" }}>
+      {/* Section tabs + 3-dot menu */
       <div style={{ display: "flex", alignItems: "center", padding: "0 14px 12px", gap: 6, flexShrink: 0, background: C.bg, zIndex: 10, width: "100%" }}>
         <div style={{ display: "flex", gap: 5, overflowX: "auto", flex: 1, paddingBottom: 2, WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none" }}>
           {sections.map(([id, label]) => (
@@ -952,8 +952,8 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
         </div>
       </div>
 
-      <div style={{ overflowY: "auto", flex: 1, padding: "0 14px" }}>
-        {/* ── Targets section ── */}
+      <div style={{ overflowY: "auto", flex: 1, padding: "0 14px", width: "100%", boxSizing: "border-box" }}>
+        {/* ── Targets section ── */
         {section === "targets" && (
           <div>
             {/* Active target preview */}
@@ -1275,7 +1275,7 @@ export default function App() {
             {tab === "progress" && <p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Progress</p>}
             {tab === "hub" && <p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Hub</p>}
           </div>
-          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
+          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }}>
             {tab === "home" && <HomeTab data={data} date={TODAY} onNavigate={setTab} habitHistory={habitHistory} onToggleHabit={handleToggleHabit} targetHistory={targetHistory}/>}
             {tab === "log" && <LogTab data={data} activeDate={activeDate} setActiveDate={setActiveDate} onDataChange={setData} favourites={favourites} customItems={customItems} onFavourite={handleFavourite} targetHistory={targetHistory}/>}
             {tab === "progress" && <ProgressTab data={data} targetHistory={targetHistory} habitHistory={habitHistory}/>}
