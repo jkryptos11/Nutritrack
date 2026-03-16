@@ -71,7 +71,7 @@ function parseOFFProduct(p) {
   }
 }
 
-export default function BarcodeScanner({ onClose, onAdd }) {
+export default function BarcodeScanner({ onClose, onAdd, onManualAI }) {
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
@@ -87,6 +87,7 @@ export default function BarcodeScanner({ onClose, onAdd }) {
   const [camError, setCamError] = useState(null)
   const [lastCode, setLastCode] = useState('')
   const [debugMsg, setDebugMsg] = useState('Starting...')
+  const [manualName, setManualName] = useState('')
 
   useEffect(() => {
     async function init() {
@@ -261,11 +262,23 @@ export default function BarcodeScanner({ onClose, onAdd }) {
 
         {notFound && (
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
-            <div style={{ background:'rgba(0,0,0,0.9)', borderRadius:16, padding:'24px 20px', textAlign:'center' }}>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color:'#fff', margin:'0 0 8px', fontWeight:600 }}>Product not found</p>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.5)', margin:'0 0 4px' }}>Code: {lastCode}</p>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.6)', margin:'0 0 16px' }}>Not in any database. Use AI Search or Custom Meals to log manually.</p>
-              <button onClick={onClose} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:10, padding:'10px 20px', fontFamily:"'DM Sans',sans-serif", fontSize:13, cursor:'pointer' }}>Close</button>
+            <div style={{ background:'rgba(0,0,0,0.9)', borderRadius:16, padding:'24px 20px', textAlign:'center', maxWidth:320 }}>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color:'#fff', margin:'0 0 6px', fontWeight:600 }}>Not in any database</p>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:11, color:'rgba(255,255,255,0.4)', margin:'0 0 12px' }}>Code: {lastCode}</p>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:'rgba(255,255,255,0.7)', margin:'0 0 6px' }}>Type the product name and AI will estimate nutrition:</p>
+              <input
+                value={manualName}
+                onChange={e => setManualName(e.target.value)}
+                placeholder="e.g. Britannia Marie Gold biscuits"
+                style={{ width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.1)', color:'#fff', fontFamily:"'DM Sans',sans-serif", fontSize:13, outline:'none', marginBottom:10, boxSizing:'border-box' }}
+              />
+              <button
+                onClick={() => { if (manualName.trim()) { onClose(); onManualAI(manualName.trim()); } }}
+                disabled={!manualName.trim()}
+                style={{ width:'100%', background:manualName.trim()?C.accent:'rgba(255,255,255,0.2)', color:'#fff', border:'none', borderRadius:10, padding:'10px', fontFamily:"'DM Sans',sans-serif", fontSize:13, fontWeight:600, cursor:'pointer', marginBottom:8 }}>
+                Estimate with AI
+              </button>
+              <button onClick={onClose} style={{ width:'100%', background:'transparent', color:'rgba(255,255,255,0.5)', border:'1px solid rgba(255,255,255,0.2)', borderRadius:10, padding:'9px', fontFamily:"'DM Sans',sans-serif", fontSize:13, cursor:'pointer' }}>Cancel</button>
             </div>
           </div>
         )}
