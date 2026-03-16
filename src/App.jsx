@@ -1,4 +1,4 @@
-// NutriTrack v8.6 - hub width + progress flex fix
+// NutriTrack v8.7 - overflow-x + grid fix
 import { useState, useEffect, useRef } from "react";
 import { load, save } from './storage.js';
 import BarcodeScanner from './BarcodeScanner.jsx';
@@ -862,7 +862,7 @@ function ProgressTab({ data, targetHistory, habitHistory }) {
         ))}
       </div>
       <div style={{ overflowY: "auto", flex: 1, padding: "0 14px" }}>
-        {mainTab === "diet" && <div>
+        {mainTab === "diet" && <div style={{ flex: 1 }}>
           <div style={{ display: "flex", gap: 6, marginBottom: 12, overflow: "hidden" }}>
             {[["calendar","Calendar"],["weekly","Weekly"],["monthly","Monthly"]].map(([id, label]) => (
               <button key={id} onClick={() => setDietView(id)} style={{ flex: 1, padding: "7px 4px", border: `1.5px solid ${dietView === id ? C.accent : C.border}`, borderRadius: 10, fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: dietView === id ? 600 : 400, cursor: "pointer", background: dietView === id ? C.accentLight : C.card, color: dietView === id ? C.accent : C.muted, minWidth: 0 }}>{label}</button>
@@ -952,7 +952,7 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
         </div>
       </div>
 
-      <div style={{ overflowY: "auto", flex: 1, padding: "0 14px", width: "100%", boxSizing: "border-box" }}>
+      <div style={{ overflowY: "auto", overflowX: "hidden", flex: 1, padding: "0 14px", width: "100%", boxSizing: "border-box" }}>
         {/* ── Targets section ── */}
         {section === "targets" && (
           <div>
@@ -966,9 +966,9 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
                     <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 10, color: C.accent, background: C.card, borderRadius: 8, padding: "3px 8px", fontWeight: 600 }}>Active</span>
                   </div>
                   <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: C.muted, margin: "0 0 8px" }}>{active.startDate} → {active.endDate || "ongoing"}</p>
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
                     {Object.entries(MACRO_CONFIG).map(([k, cfg]) => (
-                      <div key={k} style={{ flex: 1, textAlign: "center" }}>
+                      <div key={k} style={{ textAlign: "center" }}>
                         <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 700, color: cfg.color, margin: 0 }}>{active[k]}{cfg.unit}</p>
                         <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 9, color: C.muted, margin: "2px 0 0", textTransform: "uppercase" }}>{cfg.label}{active.primary === k ? " ★" : ""}</p>
                       </div>
@@ -1268,7 +1268,7 @@ export default function App() {
   return (
     <>
       <style>{FONT}</style>
-      <div style={{ display: "flex", flexDirection: "column", height: "100%", background: C.bg, position: "relative", maxWidth: 480, margin: "0 auto", overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: "column", height: "100%", background: C.bg, position: "relative", maxWidth: 480, margin: "0 auto", overflow: "hidden", width: "100%" }}>
           <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 16px) 18px 6px", flexShrink: 0, background: C.bg, zIndex: 1 }}>
             {tab === "home" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{new Date().toLocaleDateString("en",{weekday:"long",month:"short",day:"numeric"})}</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Good morning 👋</p></>}
             {tab === "log" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Meal Log</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>{activeDate === TODAY ? "Today" : formatDate(activeDate)}</p></>}
