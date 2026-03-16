@@ -1,4 +1,4 @@
-// NutriTrack v8.4 - definitive fixes
+// NutriTrack v8.5 - layout chain fix
 import { useState, useEffect, useRef } from "react";
 import { load, save } from './storage.js';
 import BarcodeScanner from './BarcodeScanner.jsx';
@@ -1269,13 +1269,13 @@ export default function App() {
     <>
       <style>{FONT}</style>
       <div style={{ display: "flex", flexDirection: "column", height: "100%", background: C.bg, position: "relative", maxWidth: 480, margin: "0 auto", overflow: "hidden" }}>
-          <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 16px) 18px 6px", flexShrink: 0, background: C.bg }}>
+          <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 16px) 18px 6px", flexShrink: 0, background: C.bg, zIndex: 1 }}>
             {tab === "home" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{new Date().toLocaleDateString("en",{weekday:"long",month:"short",day:"numeric"})}</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Good morning 👋</p></>}
             {tab === "log" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Meal Log</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>{activeDate === TODAY ? "Today" : formatDate(activeDate)}</p></>}
             {tab === "progress" && <p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Progress</p>}
             {tab === "hub" && <p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Hub</p>}
           </div>
-          <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", position: "relative" }}>
+          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
             {tab === "home" && <HomeTab data={data} date={TODAY} onNavigate={setTab} habitHistory={habitHistory} onToggleHabit={handleToggleHabit} targetHistory={targetHistory}/>}
             {tab === "log" && <LogTab data={data} activeDate={activeDate} setActiveDate={setActiveDate} onDataChange={setData} favourites={favourites} customItems={customItems} onFavourite={handleFavourite} targetHistory={targetHistory}/>}
             {tab === "progress" && <ProgressTab data={data} targetHistory={targetHistory} habitHistory={habitHistory}/>}
