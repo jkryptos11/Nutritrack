@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library'
 
 const C = {
   accent: '#5C6B3A', accentLight: '#EDF0E4', muted: '#9A9590',
@@ -33,10 +32,9 @@ export default function BarcodeScanner({ onClose, onAdd }) {
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
-  const readerRef = useRef(null)
   const intervalRef = useRef(null)
   const foundRef = useRef(false)
-  const scanCountRef = useRef(0)
+  const detectorRef = useRef(null)
 
   const [phase, setPhase] = useState('scanning')
   const [product, setProduct] = useState(null)
@@ -45,38 +43,39 @@ export default function BarcodeScanner({ onClose, onAdd }) {
   const [notFound, setNotFound] = useState(false)
   const [camError, setCamError] = useState(null)
   const [lastCode, setLastCode] = useState('')
-  const [debugMsg, setDebugMsg] = useState('Starting camera...')
+  const [debugMsg, setDebugMsg] = useState('Starting...')
 
   useEffect(() => {
-    const hints = new Map()
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-      BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
-      BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
-      BarcodeFormat.CODE_128, BarcodeFormat.QR_CODE,
-    ])
-    hints.set(DecodeHintType.TRY_HARDER, true)
-    readerRef.current = new BrowserMultiFormatReader(hints)
+    async function init() {
+      // Check which scanning method to use
+      const hasNative = 'BarcodeDetector' in window
+      setDebugMsg(hasNative ? 'Using native detector' : 'Using ZXing decoder')
 
-    async function startCamera() {
+      // Setup native BarcodeDetector if available (Chrome Android)
+      if (hasNative) {
+        try {
+          detectorRef.current = new window.BarcodeDetector({
+            formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code']
+          })
+        } catch {}
+      }
+
+      // Start camera
       try {
         let stream
         try {
           stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+            video: { facingMode: { exact: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
           })
-          setDebugMsg('Camera started (rear)')
         } catch {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' }
-          })
-          setDebugMsg('Camera started (fallback)')
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
         }
         streamRef.current = stream
         videoRef.current.srcObject = stream
         videoRef.current.onloadedmetadata = () => {
           videoRef.current.play().then(() => {
-            setDebugMsg(`Video playing: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`)
-            startScanning()
+            setDebugMsg(`${hasNative ? 'Native' : 'ZXing'} | ${videoRef.current.videoWidth}x${videoRef.current.videoHeight} | Scanning...`)
+            startScanning(hasNative)
           })
         }
       } catch (err) {
@@ -88,49 +87,73 @@ export default function BarcodeScanner({ onClose, onAdd }) {
       }
     }
 
-    function startScanning() {
-      if (intervalRef.current) return
-      setDebugMsg('Scanning...')
+    async function startScanning(useNative) {
+      // For native BarcodeDetector - scan video element directly
+      if (useNative && detectorRef.current) {
+        intervalRef.current = setInterval(async () => {
+          if (foundRef.current || !videoRef.current) return
+          if (videoRef.current.readyState < 2) return
+          try {
+            const barcodes = await detectorRef.current.detect(videoRef.current)
+            if (barcodes.length > 0) {
+              const code = barcodes[0].rawValue
+              handleFound(code)
+            }
+          } catch {}
+        }, 300)
+        return
+      }
+
+      // Fallback: ZXing with canvas
+      let zxing = null
+      try {
+        const { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } = await import('@zxing/library')
+        const hints = new Map()
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
+          BarcodeFormat.CODE_128, BarcodeFormat.QR_CODE,
+        ])
+        hints.set(DecodeHintType.TRY_HARDER, true)
+        zxing = new BrowserMultiFormatReader(hints)
+      } catch (e) {
+        setCamError('Scanner library failed to load.')
+        return
+      }
+
+      let frameCount = 0
       intervalRef.current = setInterval(() => {
-        if (foundRef.current) return
+        if (foundRef.current || !videoRef.current || !canvasRef.current) return
         const video = videoRef.current
+        if (video.readyState < 2 || video.videoWidth === 0) return
         const canvas = canvasRef.current
-        if (!video || !canvas) return
-        if (video.readyState < 2 || video.videoWidth === 0) {
-          setDebugMsg(`Waiting for video... readyState=${video.readyState}`)
-          return
-        }
         canvas.width = video.videoWidth
         canvas.height = video.videoHeight
-        const ctx = canvas.getContext('2d')
-        ctx.drawImage(video, 0, 0)
-        scanCountRef.current++
-        if (scanCountRef.current % 10 === 0) {
-          setDebugMsg(`Scanning frame ${scanCountRef.current} (${video.videoWidth}x${video.videoHeight})`)
-        }
+        canvas.getContext('2d').drawImage(video, 0, 0)
+        frameCount++
+        if (frameCount % 10 === 0) setDebugMsg(`ZXing | ${video.videoWidth}x${video.videoHeight} | Frame ${frameCount}`)
         try {
-          const result = readerRef.current.decodeFromCanvas(canvas)
-          if (result) {
-            foundRef.current = true
-            clearInterval(intervalRef.current)
-            const code = result.getText()
-            setLastCode(code)
-            setDebugMsg(`Found: ${code}`)
-            if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
-            setLookingUp(true)
-            lookupBarcode(code).then(found => {
-              setLookingUp(false)
-              if (found) { setProduct(found); setPhase('found') }
-              else setNotFound(true)
-            })
-          }
-        } catch (e) {
-          // NotFoundException is normal - barcode not in frame yet
-        }
-      }, 400)
+          const result = zxing.decodeFromCanvas(canvas)
+          if (result) handleFound(result.getText())
+        } catch {}
+      }, 300)
     }
 
-    startCamera()
+    function handleFound(code) {
+      if (foundRef.current) return
+      foundRef.current = true
+      clearInterval(intervalRef.current)
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+      setLastCode(code)
+      setLookingUp(true)
+      lookupBarcode(code).then(found => {
+        setLookingUp(false)
+        if (found) { setProduct(found); setPhase('found') }
+        else setNotFound(true)
+      })
+    }
+
+    init()
 
     return () => {
       clearInterval(intervalRef.current)
@@ -154,14 +177,7 @@ export default function BarcodeScanner({ onClose, onAdd }) {
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted/>
 
-        {/* Debug overlay - always visible so we can diagnose */}
-        {!lookingUp && phase === 'scanning' && !notFound && !camError && (
-          <div style={{ position: 'absolute', bottom: 100, left: 16, right: 16, background: 'rgba(0,0,0,0.7)', borderRadius: 8, padding: '8px 12px' }}>
-            <p style={{ fontFamily: 'monospace', fontSize: 11, color: '#0f0', margin: 0 }}>{debugMsg}</p>
-          </div>
-        )}
-
-        {!camError && phase === 'scanning' && !lookingUp && !notFound && (
+        {!camError && phase === 'scanning' && !lookingUp && !notFound && (<>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
             <style>{`@keyframes scanline{0%{top:5%}100%{top:88%}}`}</style>
             <div style={{ width: 260, height: 160, position: 'relative' }}>
@@ -173,16 +189,19 @@ export default function BarcodeScanner({ onClose, onAdd }) {
               <div style={{ position:'absolute', left:4, right:4, height:2, background:`${C.accent}CC`, animation:'scanline 2s ease-in-out infinite alternate', boxShadow:`0 0 8px ${C.accent}` }}/>
             </div>
             <div style={{ marginTop: 20, background: 'rgba(0,0,0,0.6)', borderRadius: 10, padding: '8px 20px' }}>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize: 13, color: 'rgba(255,255,255,0.9)', margin: 0 }}>Hold steady — scanning every 0.4s</p>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize: 13, color: 'rgba(255,255,255,0.9)', margin: 0 }}>Hold steady — point at barcode</p>
             </div>
           </div>
-        )}
+          <div style={{ position: 'absolute', bottom: 90, left: 16, right: 16, background: 'rgba(0,0,0,0.65)', borderRadius: 8, padding: '6px 12px' }}>
+            <p style={{ fontFamily: 'monospace', fontSize: 10, color: '#4f4', margin: 0 }}>{debugMsg}</p>
+          </div>
+        </>)}
 
         {lookingUp && (
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
             <div style={{ background:'rgba(0,0,0,0.85)', borderRadius:16, padding:'24px 32px', textAlign:'center' }}>
               <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:16, color:'#fff', margin:'0 0 6px', fontWeight:600 }}>Barcode detected!</p>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.6)', margin:'0 0 4px' }}>Code: {lastCode}</p>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.5)', margin:'0 0 4px' }}>Code: {lastCode}</p>
               <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:'rgba(255,255,255,0.6)', margin:0 }}>Looking up product…</p>
             </div>
           </div>
@@ -201,7 +220,7 @@ export default function BarcodeScanner({ onClose, onAdd }) {
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
             <div style={{ background:'rgba(0,0,0,0.9)', borderRadius:16, padding:'24px 20px', textAlign:'center' }}>
               <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color:'#fff', margin:'0 0 8px', fontWeight:600 }}>Product not found</p>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.6)', margin:'0 0 4px' }}>Code: {lastCode}</p>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.5)', margin:'0 0 4px' }}>Code scanned: {lastCode}</p>
               <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.6)', margin:'0 0 16px' }}>Not in Open Food Facts database</p>
               <button onClick={onClose} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:10, padding:'10px 20px', fontFamily:"'DM Sans',sans-serif", fontSize:13, cursor:'pointer' }}>Close</button>
             </div>
