@@ -32,27 +32,30 @@ async function lookupBarcode(code) {
 export default function BarcodeScanner({ onClose, onAdd }) {
   const videoRef = useRef(null)
   const readerRef = useRef(null)
+  const animRef = useRef(null)
   const [phase, setPhase] = useState('scanning')
   const [product, setProduct] = useState(null)
   const [servings, setServings] = useState('1')
   const [lookingUp, setLookingUp] = useState(false)
   const [notFound, setNotFound] = useState(false)
   const [camError, setCamError] = useState(null)
+  const foundRef = useRef(false)
 
   useEffect(() => {
-    let stopped = false
+    let stream = null
+
     async function startScanner() {
       try {
-        // Request high-res rear camera explicitly for sharp scanning
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { exact: 'environment' },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            focusMode: 'continuous',
-          }
-        })
-        if (stopped) { stream.getTracks().forEach(t => t.stop()); return; }
+        // Try environment camera first, fall back to any camera
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          })
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        }
+
+        if (!videoRef.current) return
         videoRef.current.srcObject = stream
         await videoRef.current.play()
 
@@ -63,30 +66,47 @@ export default function BarcodeScanner({ onClose, onAdd }) {
           BarcodeFormat.CODE_128, BarcodeFormat.QR_CODE,
         ])
         hints.set(DecodeHintType.TRY_HARDER, true)
+
         readerRef.current = new BrowserMultiFormatReader(hints)
 
-        readerRef.current.decodeFromStream(stream, videoRef.current, async (result, err) => {
-          if (result && !stopped) {
-            stopped = true
-            readerRef.current.reset()
-            stream.getTracks().forEach(t => t.stop())
-            setLookingUp(true)
-            const found = await lookupBarcode(result.getText())
-            setLookingUp(false)
-            if (found) { setProduct(found); setPhase('found') }
-            else setNotFound(true)
-          }
-        })
+        // Use continuous decode loop instead of deprecated decodeFromStream
+        async function scanLoop() {
+          if (foundRef.current || !videoRef.current) return
+          try {
+            const result = await readerRef.current.decodeFromVideoElement(videoRef.current)
+            if (result && !foundRef.current) {
+              foundRef.current = true
+              if (stream) stream.getTracks().forEach(t => t.stop())
+              setLookingUp(true)
+              const found = await lookupBarcode(result.getText())
+              setLookingUp(false)
+              if (found) { setProduct(found); setPhase('found') }
+              else setNotFound(true)
+              return
+            }
+          } catch {}
+          animRef.current = requestAnimationFrame(scanLoop)
+        }
+        scanLoop()
+
       } catch (err) {
-        setCamError(err.name === 'NotAllowedError'
-          ? 'Camera permission denied. Please allow camera access in your browser settings.'
-          : `Camera error: ${err.message}`)
+        setCamError(
+          err.name === 'NotAllowedError'
+            ? 'Camera permission denied. Please allow camera access in your browser settings.'
+            : err.name === 'NotFoundError'
+            ? 'No camera found on this device.'
+            : `Camera error: ${err.message}`
+        )
       }
     }
+
     startScanner()
+
     return () => {
-      stopped = true
+      foundRef.current = true
+      if (animRef.current) cancelAnimationFrame(animRef.current)
       try { readerRef.current?.reset() } catch {}
+      if (stream) stream.getTracks().forEach(t => t.stop())
       if (videoRef.current?.srcObject) {
         videoRef.current.srcObject.getTracks().forEach(t => t.stop())
       }
@@ -104,30 +124,28 @@ export default function BarcodeScanner({ onClose, onAdd }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 200, display: 'flex', flexDirection: 'column' }}>
-      {/* Camera */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted autoPlay/>
 
-        {/* Overlay UI */}
         {!camError && phase === 'scanning' && !lookingUp && !notFound && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            <style>{`@keyframes scanline{0%{top:15%}100%{top:82%}}`}</style>
-            <div style={{ width: 260, height: 140, position: 'relative' }}>
+            <style>{`@keyframes scanline{0%{top:10%}100%{top:85%}}`}</style>
+            <div style={{ width: 260, height: 160, position: 'relative' }}>
               {[[0,0],[0,1],[1,0],[1,1]].map(([r,c],i) => (
-                <div key={i} style={{ position:'absolute', top:r?'auto':0, bottom:r?0:'auto', left:c?'auto':0, right:c?0:'auto', width:28, height:28, borderTop:r?'none':`3px solid ${C.accent}`, borderBottom:r?`3px solid ${C.accent}`:'none', borderLeft:c?'none':`3px solid ${C.accent}`, borderRight:c?`3px solid ${C.accent}`:'none' }}/>
+                <div key={i} style={{ position:'absolute', top:r?'auto':0, bottom:r?0:'auto', left:c?'auto':0, right:c?0:'auto', width:32, height:32, borderTop:r?'none':`3px solid ${C.accent}`, borderBottom:r?`3px solid ${C.accent}`:'none', borderLeft:c?'none':`3px solid ${C.accent}`, borderRight:c?`3px solid ${C.accent}`:'none', borderRadius: r===0&&c===0?'4px 0 0 0':r===0&&c===1?'0 4px 0 0':r===1&&c===0?'0 0 0 4px':'0 0 4px 0' }}/>
               ))}
-              <div style={{ position:'absolute', left:4, right:4, height:2, background:`${C.accent}DD`, animation:'scanline 2s ease-in-out infinite alternate', boxShadow:`0 0 8px ${C.accent}` }}/>
+              <div style={{ position:'absolute', left:4, right:4, height:2, background:`${C.accent}CC`, animation:'scanline 2s ease-in-out infinite alternate', boxShadow:`0 0 8px ${C.accent}` }}/>
             </div>
-            <div style={{ marginTop:20, background:'rgba(0,0,0,0.55)', borderRadius:10, padding:'8px 18px' }}>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:'rgba(255,255,255,0.85)', margin:0, textAlign:'center' }}>Point at barcode</p>
+            <div style={{ marginTop:20, background:'rgba(0,0,0,0.6)', borderRadius:10, padding:'8px 20px' }}>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:'rgba(255,255,255,0.9)', margin:0 }}>Point camera at barcode</p>
             </div>
           </div>
         )}
 
         {lookingUp && (
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <div style={{ background:'rgba(0,0,0,0.75)', borderRadius:16, padding:'20px 30px', textAlign:'center' }}>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color:'#fff', margin:'0 0 6px' }}>Barcode detected!</p>
+            <div style={{ background:'rgba(0,0,0,0.8)', borderRadius:16, padding:'24px 32px', textAlign:'center' }}>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:16, color:'#fff', margin:'0 0 6px', fontWeight:600 }}>Barcode detected!</p>
               <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:'rgba(255,255,255,0.6)', margin:0 }}>Looking up product…</p>
             </div>
           </div>
@@ -135,7 +153,7 @@ export default function BarcodeScanner({ onClose, onAdd }) {
 
         {camError && (
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
-            <div style={{ background:'rgba(0,0,0,0.85)', borderRadius:16, padding:'24px 20px', textAlign:'center' }}>
+            <div style={{ background:'rgba(0,0,0,0.9)', borderRadius:16, padding:'24px 20px', textAlign:'center' }}>
               <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color:'#fff', margin:'0 0 16px' }}>{camError}</p>
               <button onClick={onClose} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:10, padding:'10px 24px', fontFamily:"'DM Sans',sans-serif", fontSize:13, cursor:'pointer' }}>Go back</button>
             </div>
@@ -144,22 +162,20 @@ export default function BarcodeScanner({ onClose, onAdd }) {
 
         {notFound && (
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
-            <div style={{ background:'rgba(0,0,0,0.85)', borderRadius:16, padding:'24px 20px', textAlign:'center' }}>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color:'#fff', margin:'0 0 8px' }}>Product not found</p>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.6)', margin:'0 0 16px' }}>Not in Open Food Facts database</p>
-              <button onClick={() => { setNotFound(false); setPhase('scanning'); }} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:10, padding:'10px 24px', fontFamily:"'DM Sans',sans-serif", fontSize:13, cursor:'pointer', marginRight:8 }}>Try again</button>
-              <button onClick={onClose} style={{ background:'rgba(255,255,255,0.15)', color:'#fff', border:'none', borderRadius:10, padding:'10px 24px', fontFamily:"'DM Sans',sans-serif", fontSize:13, cursor:'pointer' }}>Cancel</button>
+            <div style={{ background:'rgba(0,0,0,0.9)', borderRadius:16, padding:'24px 20px', textAlign:'center' }}>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color:'#fff', margin:'0 0 8px', fontWeight:600 }}>Product not found</p>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.6)', margin:'0 0 16px' }}>Not in the Open Food Facts database</p>
+              <button onClick={() => { foundRef.current = false; setNotFound(false); setPhase('scanning'); }} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:10, padding:'10px 20px', fontFamily:"'DM Sans',sans-serif", fontSize:13, cursor:'pointer', marginRight:8 }}>Try again</button>
+              <button onClick={onClose} style={{ background:'rgba(255,255,255,0.15)', color:'#fff', border:'none', borderRadius:10, padding:'10px 20px', fontFamily:"'DM Sans',sans-serif", fontSize:13, cursor:'pointer' }}>Cancel</button>
             </div>
           </div>
         )}
 
-        {/* Close button */}
-        <button onClick={onClose} style={{ position:'absolute', top:'max(16px, env(safe-area-inset-top))', right:16, width:38, height:38, borderRadius:19, background:'rgba(0,0,0,0.5)', border:'1px solid rgba(255,255,255,0.2)', cursor:'pointer', fontSize:20, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10 }}>×</button>
+        <button onClick={onClose} style={{ position:'absolute', top:16, right:16, width:40, height:40, borderRadius:20, background:'rgba(0,0,0,0.6)', border:'1.5px solid rgba(255,255,255,0.3)', cursor:'pointer', fontSize:22, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10 }}>×</button>
       </div>
 
-      {/* Product found sheet */}
       {phase === 'found' && product && (
-        <div style={{ background:C.card, borderRadius:'20px 20px 0 0', padding:'18px 18px 36px', maxHeight:'55%', overflowY:'auto' }}>
+        <div style={{ background:C.card, borderRadius:'20px 20px 0 0', padding:'18px 18px 40px', maxHeight:'55%', overflowY:'auto' }}>
           <div style={{ background:C.greenBg, border:`1px solid ${C.green}`, borderRadius:12, padding:'9px 13px', marginBottom:12, display:'flex', alignItems:'center', gap:8 }}>
             <span style={{ color:C.green, fontWeight:700 }}>✓</span>
             <span style={{ fontFamily:"'DM Sans',sans-serif", fontSize:13, color:C.green, fontWeight:500 }}>Product found!</span>
@@ -167,24 +183,24 @@ export default function BarcodeScanner({ onClose, onAdd }) {
           <div style={{ background:C.bg, borderRadius:12, padding:'11px 13px', marginBottom:12 }}>
             <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:14, fontWeight:600, color:C.text, margin:'0 0 3px' }}>{product.name}</p>
             <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:11, color:C.muted, margin:'0 0 8px' }}>Per serving ({product.servingSize})</p>
-            <div style={{ display:'flex', gap:10 }}>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
               <span style={{ fontSize:12, color:C.kcal, fontWeight:600 }}>{product.kcal} kcal</span>
               <span style={{ fontSize:12, color:C.protein }}>P {product.protein}g</span>
               <span style={{ fontSize:12, color:C.carbs }}>C {product.carbs}g</span>
               <span style={{ fontSize:12, color:C.fat }}>F {product.fat}g</span>
             </div>
           </div>
-          <label style={{ fontFamily:"'DM Sans',sans-serif", fontSize:11, color:C.muted, display:'block', marginBottom:7, textTransform:'uppercase', letterSpacing:'0.04em' }}>Servings</label>
+          <label style={{ fontFamily:"'DM Sans',sans-serif", fontSize:11, color:C.muted, display:'block', marginBottom:7, textTransform:'uppercase', letterSpacing:'0.04em' }}>Number of servings</label>
           <div style={{ display:'flex', gap:6, marginBottom:12 }}>
             {['0.5','1','1.5','2'].map(s => (
-              <button key={s} onClick={() => setServings(s)} style={{ flex:1, padding:'9px', border:`1.5px solid ${servings===s?C.accent:C.border}`, borderRadius:10, background:servings===s?C.accentLight:C.bg, color:servings===s?C.accent:C.muted, fontFamily:"'DM Sans',sans-serif", fontSize:14, fontWeight:servings===s?600:400, cursor:'pointer' }}>{s}</button>
+              <button key={s} onClick={() => setServings(s)} style={{ flex:1, padding:'9px 4px', border:`1.5px solid ${servings===s?C.accent:C.border}`, borderRadius:10, background:servings===s?C.accentLight:C.bg, color:servings===s?C.accent:C.muted, fontFamily:"'DM Sans',sans-serif", fontSize:14, fontWeight:servings===s?600:400, cursor:'pointer' }}>{s}</button>
             ))}
-            <input type="number" value={servings} onChange={e => setServings(e.target.value)} style={{ flex:1, padding:'9px', border:`1.5px solid ${C.border}`, borderRadius:10, background:C.bg, fontFamily:"'DM Sans',sans-serif", fontSize:13, color:C.text, outline:'none', textAlign:'center' }}/>
+            <input type="number" value={servings} onChange={e => setServings(e.target.value)} min="0.1" step="0.5" style={{ flex:1, padding:'9px 4px', border:`1.5px solid ${C.border}`, borderRadius:10, background:C.bg, fontFamily:"'DM Sans',sans-serif", fontSize:13, color:C.text, outline:'none', textAlign:'center' }}/>
           </div>
           {scaled && (
-            <div style={{ background:C.accentLight, borderRadius:11, padding:'10px 13px', marginBottom:12 }}>
+            <div style={{ background:C.accentLight, borderRadius:11, padding:'10px 13px', marginBottom:14 }}>
               <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:11, color:C.accent, margin:'0 0 4px', fontWeight:600 }}>Total for {servings} serving{sv!==1?'s':''}</p>
-              <div style={{ display:'flex', gap:12 }}>
+              <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
                 <span style={{ fontSize:13, color:C.kcal, fontWeight:700 }}>{scaled.kcal} kcal</span>
                 <span style={{ fontSize:13, color:C.protein, fontWeight:600 }}>P {scaled.protein}g</span>
                 <span style={{ fontSize:13, color:C.carbs }}>C {scaled.carbs}g</span>
