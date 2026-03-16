@@ -8,24 +8,67 @@ const C = {
 }
 
 async function lookupBarcode(code) {
+  // Try multiple databases in order
+  const result = await tryOpenFoodFacts(code)
+    || await tryOpenFoodFactsIN(code)
+    || await tryUPCItemDB(code)
+  return result
+}
+
+async function tryOpenFoodFacts(code) {
   try {
     const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`)
     const data = await res.json()
     if (data.status === 1 && data.product) {
-      const p = data.product
-      const n = p.nutriments || {}
-      const servingG = parseFloat(p.serving_size) || 100
+      return parseOFFProduct(data.product)
+    }
+  } catch {}
+  return null
+}
+
+async function tryOpenFoodFactsIN(code) {
+  // Indian Open Food Facts database
+  try {
+    const res = await fetch(`https://in.openfoodfacts.org/api/v0/product/${code}.json`)
+    const data = await res.json()
+    if (data.status === 1 && data.product) {
+      return parseOFFProduct(data.product)
+    }
+  } catch {}
+  return null
+}
+
+async function tryUPCItemDB(code) {
+  // UPC Item DB - good for packaged goods
+  try {
+    const res = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${code}`)
+    const data = await res.json()
+    if (data.code === 'OK' && data.items && data.items.length > 0) {
+      const item = data.items[0]
+      // UPC Item DB doesn't have nutrition, but gives us the product name
+      // Return with zero nutrition so user can edit manually
       return {
-        name: p.product_name || p.abbreviated_product_name || 'Unknown product',
-        kcal: Math.round(n['energy-kcal_serving'] || (n['energy-kcal_100g'] || 0) / 100 * servingG) || 0,
-        protein: Math.round(((n['proteins_serving'] || (n['proteins_100g'] || 0) / 100 * servingG)) * 10) / 10,
-        carbs: Math.round(((n['carbohydrates_serving'] || (n['carbohydrates_100g'] || 0) / 100 * servingG)) * 10) / 10,
-        fat: Math.round(((n['fat_serving'] || (n['fat_100g'] || 0) / 100 * servingG)) * 10) / 10,
-        servingSize: p.serving_size || '1 serving',
+        name: item.title || item.brand || 'Unknown product',
+        kcal: 0, protein: 0, carbs: 0, fat: 0,
+        servingSize: '1 serving',
+        noNutrition: true,
       }
     }
   } catch {}
   return null
+}
+
+function parseOFFProduct(p) {
+  const n = p.nutriments || {}
+  const servingG = parseFloat(p.serving_size) || 100
+  return {
+    name: p.product_name || p.product_name_en || p.abbreviated_product_name || 'Unknown product',
+    kcal: Math.round(n['energy-kcal_serving'] || (n['energy-kcal_100g'] || 0) / 100 * servingG) || 0,
+    protein: Math.round(((n['proteins_serving'] || (n['proteins_100g'] || 0) / 100 * servingG)) * 10) / 10,
+    carbs: Math.round(((n['carbohydrates_serving'] || (n['carbohydrates_100g'] || 0) / 100 * servingG)) * 10) / 10,
+    fat: Math.round(((n['fat_serving'] || (n['fat_100g'] || 0) / 100 * servingG)) * 10) / 10,
+    servingSize: p.serving_size || '1 serving',
+  }
 }
 
 export default function BarcodeScanner({ onClose, onAdd }) {
@@ -220,8 +263,8 @@ export default function BarcodeScanner({ onClose, onAdd }) {
           <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
             <div style={{ background:'rgba(0,0,0,0.9)', borderRadius:16, padding:'24px 20px', textAlign:'center' }}>
               <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:15, color:'#fff', margin:'0 0 8px', fontWeight:600 }}>Product not found</p>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.5)', margin:'0 0 4px' }}>Code scanned: {lastCode}</p>
-              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.6)', margin:'0 0 16px' }}>Not in Open Food Facts database</p>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.5)', margin:'0 0 4px' }}>Code: {lastCode}</p>
+              <p style={{ fontFamily:"'DM Sans',sans-serif", fontSize:12, color:'rgba(255,255,255,0.6)', margin:'0 0 16px' }}>Not in any database. Use AI Search or Custom Meals to log manually.</p>
               <button onClick={onClose} style={{ background:C.accent, color:'#fff', border:'none', borderRadius:10, padding:'10px 20px', fontFamily:"'DM Sans',sans-serif", fontSize:13, cursor:'pointer' }}>Close</button>
             </div>
           </div>
