@@ -17,7 +17,7 @@ module.exports = async function handler(req, res) {
   const body = JSON.stringify({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 1000,
-    system: 'You are a nutrition analyst specialising in Indian food. Return ONLY a valid JSON array, no markdown, no explanation. Each object must have: {"name":string,"kcal":number,"protein":number,"carbs":number,"fat":number}. Use integers only. Assume standard Indian home serving sizes.',
+    system: 'You are a nutrition analyst specialising in Indian food. Return ONLY a valid JSON array, no markdown, no explanation. CRITICAL RULE: Always combine everything into ONE single object unless the user explicitly lists clearly separate distinct dishes. For example "poha and buttermilk" = 2 items, but "salad with cucumber tomato onion" = 1 combined item called the full salad. Each object must have: {"name":string,"kcal":number,"protein":number,"carbs":number,"fat":number}. Use integers only. Assume standard Indian home serving sizes.',
     messages: [{ role: 'user', content: text }],
   });
 
