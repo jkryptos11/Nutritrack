@@ -1,4 +1,4 @@
-// NutriTrack v9.1 - audited + cleaned
+// NutriTrack v9.2 - batch 2 (audited)
 import { useState, useEffect, useRef } from "react";
 import { load, save } from './storage.js';
 import BarcodeScanner from './BarcodeScanner.jsx';
@@ -39,10 +39,22 @@ const MACRO_CONFIG = {
 
 function calcTargets(primary, value) {
   const v = parseFloat(value) || 0;
-  if (primary === "protein") return { protein: v, kcal: Math.round(v * 20), carbs: Math.round(v * 3.5), fat: Math.round(v * 0.8) };
-  if (primary === "kcal") return { kcal: v, protein: Math.round(v * 0.25 / 4), carbs: Math.round(v * 0.45 / 4), fat: Math.round(v * 0.30 / 9) };
-  if (primary === "carbs") return { carbs: v, kcal: Math.round(v * 4 / 0.45), protein: Math.round(v * 0.25 / 0.45), fat: Math.round(v * 0.30 / 0.45 / 4) };
-  return { fat: v, kcal: Math.round(v * 9 / 0.30), protein: Math.round(v * 0.25 * 9 / 0.30 / 4), carbs: Math.round(v * 0.45 * 9 / 0.30 / 4) };
+  // Standard: 1g protein=4kcal, 1g carbs=4kcal, 1g fat=9kcal
+  // Split: 30% protein, 45% carbs, 25% fat of total calories
+  if (primary === "protein") {
+    const kcal = Math.round(v * 4 / 0.30);
+    return { protein: v, kcal, carbs: Math.round(kcal * 0.45 / 4), fat: Math.round(kcal * 0.25 / 9) };
+  }
+  if (primary === "kcal") {
+    return { kcal: v, protein: Math.round(v * 0.30 / 4), carbs: Math.round(v * 0.45 / 4), fat: Math.round(v * 0.25 / 9) };
+  }
+  if (primary === "carbs") {
+    const kcal = Math.round(v * 4 / 0.45);
+    return { carbs: v, kcal, protein: Math.round(kcal * 0.30 / 4), fat: Math.round(kcal * 0.25 / 9) };
+  }
+  // fat
+  const kcal = Math.round(v * 9 / 0.25);
+  return { fat: v, kcal, protein: Math.round(kcal * 0.30 / 4), carbs: Math.round(kcal * 0.45 / 4) };
 }
 
 // Get active target for a given date from target history
@@ -69,13 +81,13 @@ const DEFAULT_HABITS = [
 ];
 
 const INITIAL_TARGET_HISTORY = [{
-  id: uid(), startDate: "2026-03-01", endDate: null,
+  id: uid(), startDate: TODAY, endDate: null,
   kcal: 2000, protein: 120, carbs: 200, fat: 65, primary: "protein",
-  includeWeekends: true, label: "March target"
+  includeWeekends: true, label: "Default target"
 }];
 
 const INITIAL_HABIT_HISTORY = [{
-  id: uid(), startDate: "2026-03-01", endDate: null,
+  id: uid(), startDate: TODAY, endDate: null,
   habits: DEFAULT_HABITS, includeWeekends: true, label: "Default habits"
 }];
 
@@ -139,6 +151,18 @@ function MacroBar({ label, value, target, higherIsBetter }) {
 
 function NutritionTable({ items, onDeleteItem }) {
   const cols = ["Kcal","Protein","Carbs","Fat"], colColors = [C.kcal,C.protein,C.carbs,C.fat], keys = ["kcal","protein","carbs","fat"], units = ["","g","g","g"];
+  // Group same-named items and show combined qty
+  const grouped = [];
+  items.forEach(item => {
+    const existing = grouped.find(g => g.name === item.name);
+    if (existing) {
+      existing.qty++;
+      keys.forEach(k => { existing[k] += item[k] || 0; });
+      existing.ids.push(item.id);
+    } else {
+      grouped.push({ ...item, qty: 1, ids: [item.id] });
+    }
+  });
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'DM Sans',sans-serif" }}>
       <thead><tr>
@@ -147,11 +171,16 @@ function NutritionTable({ items, onDeleteItem }) {
         <th style={{ width: 24 }}/>
       </tr></thead>
       <tbody>
-        {items.map(item => (
-          <tr key={item.id} style={{ borderTop: `1px solid ${C.border}` }}>
-            <td style={{ fontSize: 12, color: C.text, padding: "8px 6px 8px 0", lineHeight: 1.3 }}>{item.name}</td>
+        {grouped.map(item => (
+          <tr key={item.ids[0]} style={{ borderTop: `1px solid ${C.border}` }}>
+            <td style={{ fontSize: 12, color: C.text, padding: "8px 6px 8px 0", lineHeight: 1.3 }}>
+              {item.name}
+              {item.qty > 1 && <span style={{ fontSize: 10, color: C.accent, fontWeight: 600, marginLeft: 4 }}>×{item.qty}</span>}
+            </td>
             {keys.map((k, i) => <td key={k} style={{ textAlign: "right", fontSize: 12, color: C.text, padding: "8px 3px", fontWeight: 500 }}>{item[k]}{units[i]}</td>)}
-            <td style={{ textAlign: "right", padding: "8px 0" }}><button onClick={() => onDeleteItem(item.id)} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 15 }}>×</button></td>
+            <td style={{ textAlign: "right", padding: "8px 0" }}>
+              <button onClick={() => item.ids.forEach(id => onDeleteItem(id))} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 15 }}>×</button>
+            </td>
           </tr>
         ))}
         {items.length > 1 && <tr style={{ borderTop: `1.5px solid ${C.border}`, background: C.bg }}>
@@ -228,8 +257,6 @@ function DateField({ label, value, onChange, minDate, maxDate }) {
   );
 }
 
-// ── Barcode Scanner (BarcodeScanner.jsx) ─────────────
-
 // ── Add Item Modal (AI Search + Saved + Scan) ──────────
 function AddItemModal({ mealName, onClose, onAdd, favourites, customItems }) {
   const [activeTab, setActiveTab] = useState("ai");
@@ -256,7 +283,7 @@ function AddItemModal({ mealName, onClose, onAdd, favourites, customItems }) {
     setLoading(false);
   }
 
-  const allSaved = [...customItems.map(i => ({ ...i, _type: "custom" })), ...favourites.map(i => ({ ...i, _type: "fav" }))];
+  const allSaved = [...customItems, ...favourites];
   if (showBarcode) return <BarcodeScanner
     onClose={() => setShowBarcode(false)}
     onAdd={(items) => { onAdd(items, {}); onClose(); }}
@@ -525,17 +552,42 @@ function HomeTab({ data, date, onNavigate, habitHistory, onToggleHabit, targetHi
   const habitList = activeHabitSet.habits || [];
   const dayHabits = dayData.habits || {};
   const completedHabits = habitList.filter(h => dayHabits[h]).length;
-  const streak = Object.keys(data).filter(d => data[d].meals.some(m => m.items.length > 0)).length;
+  // Streak: consecutive days (going back from yesterday) where primary target was met
+  // Respects includeWeekends setting from active target
+  const streak = (() => {
+    let count = 0;
+    const sortedDays = Object.keys(data).sort().reverse();
+    for (const d of sortedDays) {
+      if (d >= date) continue; // skip today - still in progress
+      const tgt = getActiveTarget(targetHistory, d);
+      if (!tgt) break;
+      const dow = new Date(d + "T00:00:00").getDay();
+      const isWeekend = dow === 0 || dow === 6;
+      if (!tgt.includeWeekends && isWeekend) continue; // skip weekends if not included
+      const dAll = (data[d]?.meals || []).flatMap(m => m.items);
+      if (dAll.length === 0) break; // no data = streak broken
+      const pk = tgt.primary || "kcal";
+      const pv = sum(dAll, pk);
+      const phib = pk === "protein";
+      const met = getStatus(pv, tgt[pk], phib) === "green";
+      if (met) count++;
+      else break;
+    }
+    return count;
+  })();
   const loggedMeals = meals.filter(m => m.items.length > 0 && m.loggedAt).sort((a, b) => b.loggedAt - a.loggedAt);
   const lastMeal = loggedMeals[0];
   const unloggedMeals = meals.filter(m => m.items.length === 0).slice(0, 2);
   const kcalStatus = activeTarget ? getStatus(kcal, activeTarget.kcal, false) : "neutral";
-  const weekDays = Object.keys(data).slice(-7);
+  const weekDays = Object.keys(data).sort().slice(-7);
   const weekScore = weekDays.length ? Math.round(weekDays.reduce((acc, d) => {
     const wAll = data[d].meals.flatMap(m => m.items);
     const wHabits = data[d].habits || {};
     const tgt = getActiveTarget(targetHistory, d);
-    const nutritionOk = tgt ? getStatus(sum(wAll,"kcal"), tgt.kcal, false) === "green" : false;
+    const pk = tgt?.primary || "kcal";
+    const pv = sum(wAll, pk);
+    const phib = pk === "protein";
+    const nutritionOk = tgt ? getStatus(pv, tgt[pk], phib) === "green" : false;
     const hs = habitList.length ? habitList.filter(h => wHabits[h]).length / habitList.length : 0;
     return acc + (nutritionOk ? 0.5 : 0) + hs * 0.5;
   }, 0) / weekDays.length * 100) : 0;
@@ -567,12 +619,29 @@ function HomeTab({ data, date, onNavigate, habitHistory, onToggleHabit, targetHi
           })}
         </div>
       </div>
+      {/* Encouraging message when 50%+ of primary target reached */}
+      {activeTarget && (() => {
+        const pk = activeTarget.primary || "kcal";
+        const pv = pk==="kcal"?kcal:pk==="protein"?protein:pk==="carbs"?carbs:fat;
+        const pct = pv / (activeTarget[pk] || 1);
+        if (pct < 0.5 || pct >= 1.0) return null;
+        const pctStr = Math.round(pct*100);
+        const msgs = {
+          protein: `💪 ${pctStr}% of protein goal — keep pushing!`,
+          kcal: `🔥 ${pctStr}% of calorie goal — great progress!`,
+          carbs: `⚡ ${pctStr}% of carbs — energy levels looking good!`,
+          fat: `✅ ${pctStr}% of fat target — stay mindful!`,
+        };
+        return <div style={{ background: C.accentLight, borderRadius: 12, padding: "10px 14px", marginBottom: 12, border: `1px solid ${C.accent}33` }}>
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.accent, fontWeight: 500, margin: 0 }}>{msgs[pk]}</p>
+        </div>;
+      })()}
       {/* Stats */}
       <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
         <div style={{ flex: 1, background: C.accent, borderRadius: 15, padding: "13px 14px" }}>
           <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 9, color: "rgba(255,255,255,0.6)", margin: "0 0 3px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Streak</p>
           <p style={{ fontFamily: "'Lora',serif", fontSize: 24, fontWeight: 500, color: "#fff", margin: 0, lineHeight: 1 }}>{streak}<span style={{ fontSize: 13, opacity: 0.75 }}> d</span></p>
-          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 10, color: "rgba(255,255,255,0.55)", margin: "3px 0 0" }}>days logged</p>
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 10, color: "rgba(255,255,255,0.55)", margin: "3px 0 0" }}>target met</p>
         </div>
         <div style={{ flex: 1, background: C.card, borderRadius: 15, padding: "13px 14px", border: `1px solid ${C.border}` }}>
           <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 9, color: C.muted, margin: "0 0 3px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Week score</p>
