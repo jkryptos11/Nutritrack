@@ -1,4 +1,4 @@
-// NutriTrack v9.2 - batch 2 (audited)
+// NutriTrack v9.3 - batch 3
 import { useState, useEffect, useRef } from "react";
 import { load, save } from './storage.js';
 import BarcodeScanner from './BarcodeScanner.jsx';
@@ -74,6 +74,15 @@ function getActiveHabitSet(habitHistory, dateStr) {
   return applicable[0] || { habits: [] };
 }
 
+function isDayActive(activeDays, dateStr) {
+  if (!activeDays || activeDays.length === 7) return true;
+  const dow = new Date(dateStr + "T00:00:00").getDay();
+  return activeDays.includes(dow);
+}
+
+const DAY_LABELS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+const ALL_DAYS = [0,1,2,3,4,5,6];
+
 const DEFAULT_HABITS = [
   "Ice water face bath", "Eltroxin with 20m break", "30 min exercise",
   "Prayer", "Post-lunch medication", "Seed cycling",
@@ -83,12 +92,12 @@ const DEFAULT_HABITS = [
 const INITIAL_TARGET_HISTORY = [{
   id: uid(), startDate: TODAY, endDate: null,
   kcal: 2000, protein: 120, carbs: 200, fat: 65, primary: "protein",
-  includeWeekends: true, label: "Default target"
+  activeDays: [0,1,2,3,4,5,6], label: "Default target"
 }];
 
 const INITIAL_HABIT_HISTORY = [{
   id: uid(), startDate: TODAY, endDate: null,
-  habits: DEFAULT_HABITS, includeWeekends: true, label: "Default habits"
+  habits: DEFAULT_HABITS, activeDays: [0,1,2,3,4,5,6], label: "Default habits"
 }];
 
 function makeFreshDay() {
@@ -553,17 +562,14 @@ function HomeTab({ data, date, onNavigate, habitHistory, onToggleHabit, targetHi
   const dayHabits = dayData.habits || {};
   const completedHabits = habitList.filter(h => dayHabits[h]).length;
   // Streak: consecutive days (going back from yesterday) where primary target was met
-  // Respects includeWeekends setting from active target
   const streak = (() => {
     let count = 0;
     const sortedDays = Object.keys(data).sort().reverse();
     for (const d of sortedDays) {
-      if (d >= date) continue; // skip today - still in progress
+      if (d >= date) continue;
       const tgt = getActiveTarget(targetHistory, d);
       if (!tgt) break;
-      const dow = new Date(d + "T00:00:00").getDay();
-      const isWeekend = dow === 0 || dow === 6;
-      if (!tgt.includeWeekends && isWeekend) continue; // skip weekends if not included
+      if (!isDayActive(tgt.activeDays || ALL_DAYS, d)) continue;
       const dAll = (data[d]?.meals || []).flatMap(m => m.items);
       if (dAll.length === 0) break; // no data = streak broken
       const pk = tgt.primary || "kcal";
@@ -580,7 +586,11 @@ function HomeTab({ data, date, onNavigate, habitHistory, onToggleHabit, targetHi
   const unloggedMeals = meals.filter(m => m.items.length === 0).slice(0, 2);
   const kcalStatus = activeTarget ? getStatus(kcal, activeTarget.kcal, false) : "neutral";
   const weekDays = Object.keys(data).sort().slice(-7);
-  const weekScore = weekDays.length ? Math.round(weekDays.reduce((acc, d) => {
+  const activeDaysCount = weekDays.filter(d => {
+    const tgt = getActiveTarget(targetHistory, d);
+    return isDayActive(tgt?.activeDays || ALL_DAYS, d);
+  });
+  const weekScore = activeDaysCount.length ? Math.round(activeDaysCount.reduce((acc, d) => {
     const wAll = data[d].meals.flatMap(m => m.items);
     const wHabits = data[d].habits || {};
     const tgt = getActiveTarget(targetHistory, d);
@@ -590,7 +600,7 @@ function HomeTab({ data, date, onNavigate, habitHistory, onToggleHabit, targetHi
     const nutritionOk = tgt ? getStatus(pv, tgt[pk], phib) === "green" : false;
     const hs = habitList.length ? habitList.filter(h => wHabits[h]).length / habitList.length : 0;
     return acc + (nutritionOk ? 0.5 : 0) + hs * 0.5;
-  }, 0) / weekDays.length * 100) : 0;
+  }, 0) / activeDaysCount.length * 100) : 0;
 
   return (
     <div style={{ padding: "14px 14px 20px", overflowY: "auto", flex: 1 }}>
@@ -648,10 +658,11 @@ function HomeTab({ data, date, onNavigate, habitHistory, onToggleHabit, targetHi
           <p style={{ fontFamily: "'Lora',serif", fontSize: 24, fontWeight: 500, color: weekScore >= 80 ? C.green : weekScore >= 60 ? C.amber : C.red, margin: 0, lineHeight: 1 }}>{weekScore}<span style={{ fontSize: 13, color: C.muted }}>%</span></p>
           <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 10, color: C.muted, margin: "3px 0 0" }}>{weekScore >= 80 ? "🏆 On fire!" : weekScore >= 60 ? "💪 Good going" : "🎯 Keep pushing"}</p>
         </div>
-        <div style={{ flex: 1, background: C.card, borderRadius: 15, padding: "13px 14px", border: `1px solid ${C.border}` }}>
-          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 9, color: C.muted, margin: "0 0 3px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Habits</p>
-          <p style={{ fontFamily: "'Lora',serif", fontSize: 24, fontWeight: 500, color: C.text, margin: 0, lineHeight: 1 }}>{completedHabits}<span style={{ fontSize: 13, color: C.muted }}>/{habitList.length}</span></p>
-          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 10, color: C.muted, margin: "3px 0 0" }}>done today</p>
+        <div style={{ flex: 1, background: C.card, borderRadius: 15, padding: "10px 8px", border: `1px solid ${C.border}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
+          <Ring value={completedHabits} max={habitList.length || 1} size={56} stroke={6}
+            color={completedHabits === habitList.length && habitList.length > 0 ? C.green : C.accent}
+            label={completedHabits} sublabel={`/${habitList.length}`}/>
+          <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 9, color: C.muted, margin: 0, textTransform: "uppercase", letterSpacing: "0.06em" }}>Habits</p>
         </div>
       </div>
       {/* Last meal */}
@@ -813,41 +824,68 @@ function ProgressTab({ data, targetHistory, habitHistory }) {
   function HabitsProgress() {
     const recentDays = days.slice(-7);
     const habitList = getHabitsForDay(TODAY);
+    const todayHabits = data[TODAY]?.habits || {};
+    const todayDone = habitList.filter(h => todayHabits[h]).length;
+    const todayPct = habitList.length ? todayDone / habitList.length : 0;
     return (
       <div>
+        {/* Today's completion — shown first */}
         <div style={{ background: C.card, borderRadius: 14, padding: "14px", border: `1px solid ${C.border}`, marginBottom: 12 }}>
-          <p style={{ fontFamily: "'Lora',serif", fontSize: 14, color: C.text, margin: "0 0 12px" }}>7-day habit completion</p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <p style={{ fontFamily: "'Lora',serif", fontSize: 14, color: C.text, margin: 0 }}>Today</p>
+            <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, fontWeight: 700, color: todayPct === 1 ? C.green : C.accent }}>{todayDone}/{habitList.length}</span>
+          </div>
+          <div style={{ height: 5, background: C.border, borderRadius: 4, marginBottom: 12 }}>
+            <div style={{ height: "100%", width: `${todayPct * 100}%`, background: todayPct === 1 ? C.green : C.accent, borderRadius: 4, transition: "width 0.4s" }}/>
+          </div>
+          {habitList.length === 0
+            ? <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.muted, textAlign: "center", padding: "8px 0" }}>No habits set</p>
+            : habitList.map(habit => {
+              const done = !!todayHabits[habit];
+              return <div key={habit} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+                <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: done ? C.green : C.text, textDecoration: done ? "line-through" : "none" }}>{habit}</span>
+                <span style={{ fontSize: 15, color: done ? C.green : C.border }}>{done ? "✓" : "○"}</span>
+              </div>;
+            })
+          }
+        </div>
+        {/* 7-day per-habit completion */}
+        {recentDays.length > 0 && <div style={{ background: C.card, borderRadius: 14, padding: "14px", border: `1px solid ${C.border}`, marginBottom: 12 }}>
+          <p style={{ fontFamily: "'Lora',serif", fontSize: 14, color: C.text, margin: "0 0 12px" }}>Last 7 days</p>
           {habitList.map(habit => {
             const done = recentDays.filter(d => (data[d]?.habits || {})[habit]).length;
-            const pct = done / recentDays.length;
+            const pct = recentDays.length ? done / recentDays.length : 0;
             return <div key={habit} style={{ marginBottom: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                 <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.text }}>{habit}</span>
-                <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 600, color: pct >= 0.8 ? C.green : pct >= 0.5 ? C.amber : C.red }}>{done}/7</span>
+                <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: 600, color: pct >= 0.8 ? C.green : pct >= 0.5 ? C.amber : C.red }}>{done}/{recentDays.length}</span>
               </div>
               <div style={{ height: 4, background: C.border, borderRadius: 4 }}>
                 <div style={{ height: "100%", width: `${pct * 100}%`, background: pct >= 0.8 ? C.green : pct >= 0.5 ? C.amber : C.red, borderRadius: 4 }}/>
               </div>
             </div>;
           })}
-        </div>
-        <div style={{ background: C.card, borderRadius: 14, padding: "14px", border: `1px solid ${C.border}` }}>
+        </div>}
+        {/* Daily completion grid */}
+        {recentDays.length > 0 && <div style={{ background: C.card, borderRadius: 14, padding: "14px", border: `1px solid ${C.border}` }}>
           <p style={{ fontFamily: "'Lora',serif", fontSize: 14, color: C.text, margin: "0 0 12px" }}>Daily completion</p>
           <div style={{ display: "flex", gap: 4 }}>
             {recentDays.map(d => {
               const hList = getHabitsForDay(d);
-              const dayHabits = data[d]?.habits || {};
-              const pct = hList.length ? hList.filter(h => dayHabits[h]).length / hList.length : 0;
+              const dh = data[d]?.habits || {};
+              const pct = hList.length ? hList.filter(h => dh[h]).length / hList.length : 0;
+              const hasData = hList.length > 0 && Object.keys(dh).length > 0;
               const color = pct >= 0.8 ? C.green : pct >= 0.5 ? C.amber : C.red;
+              const isToday = d === TODAY;
               return <div key={d} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                <div style={{ width: "100%", aspectRatio: "1", borderRadius: 8, background: pct > 0 ? color + "22" : C.border, border: `1px solid ${pct > 0 ? color : C.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 10, fontWeight: 600, color: pct > 0 ? color : C.muted }}>{Math.round(pct * 100)}%</span>
+                <div style={{ width: "100%", aspectRatio: "1", borderRadius: 8, background: hasData ? color + "22" : C.bg, border: `1.5px solid ${isToday ? C.accent : hasData ? color : C.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 10, fontWeight: 600, color: hasData ? color : C.muted }}>{hasData ? Math.round(pct * 100) + "%" : "—"}</span>
                 </div>
-                <span style={{ fontSize: 8, color: C.muted, fontFamily: "'DM Sans',sans-serif" }}>{period==="weekly" ? new Date(d+"T00:00:00").toLocaleDateString("en",{weekday:"short"}) : new Date(d+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"})}</span>
+                <span style={{ fontSize: 8, color: isToday ? C.accent : C.muted, fontFamily: "'DM Sans',sans-serif", fontWeight: isToday ? 700 : 400 }}>{new Date(d + "T00:00:00").toLocaleDateString("en", { weekday: "short" })}</span>
               </div>;
             })}
           </div>
-        </div>
+        </div>}
       </div>
     );
   }
@@ -891,7 +929,7 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
   const [targetLabel, setTargetLabel] = useState("");
   const [startDate, setStartDate] = useState(TODAY);
   const [endDate, setEndDate] = useState("");
-  const [includeWeekends, setIncludeWeekends] = useState(true);
+  const [activeDays, setActiveDays] = useState([...ALL_DAYS]);
   const [calcPreview, setCalcPreview] = useState(null);
 
   // Habit set form state
@@ -900,7 +938,54 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
   const [habitLabel, setHabitLabel] = useState("");
   const [habitStartDate, setHabitStartDate] = useState(TODAY);
   const [habitEndDate, setHabitEndDate] = useState("");
-  const [habitIncludeWeekends, setHabitIncludeWeekends] = useState(true);
+  const [habitActiveDays, setHabitActiveDays] = useState([...ALL_DAYS]);
+
+  const importInputRef = useRef(null);
+
+  function handleExport() {
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: JSON.parse(localStorage.getItem("nt_data") || "{}"),
+      favourites: JSON.parse(localStorage.getItem("nt_favourites") || "[]"),
+      customItems: JSON.parse(localStorage.getItem("nt_customItems") || "[]"),
+      targetHistory: JSON.parse(localStorage.getItem("nt_targetHistory") || "[]"),
+      habitHistory: JSON.parse(localStorage.getItem("nt_habitHistory") || "[]"),
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `nutritrack-backup-${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("✓ Data exported");
+  }
+
+  function handleImportClick() {
+    importInputRef.current?.click();
+  }
+
+  function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const imported = JSON.parse(ev.target.result);
+        if (!imported.version || !imported.data) throw new Error("Invalid file");
+        if (imported.data) { localStorage.setItem("nt_data", JSON.stringify(imported.data)); }
+        if (imported.favourites) { localStorage.setItem("nt_favourites", JSON.stringify(imported.favourites)); }
+        if (imported.customItems) { localStorage.setItem("nt_customItems", JSON.stringify(imported.customItems)); }
+        if (imported.targetHistory) { localStorage.setItem("nt_targetHistory", JSON.stringify(imported.targetHistory)); }
+        if (imported.habitHistory) { localStorage.setItem("nt_habitHistory", JSON.stringify(imported.habitHistory)); }
+        showToast("✓ Data imported — reload to see changes");
+        setTimeout(() => window.location.reload(), 2000);
+      } catch { showToast("✗ Invalid backup file"); }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
 
   function handleCalculate() {
     const calc = calcTargets(primaryMacro, primaryValue);
@@ -913,7 +998,7 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
   function handleSaveTarget() {
     if (!calcPreview && !primaryValue) return;
     const calc = calcPreview || calcTargets(primaryMacro, primaryValue);
-    const newEntry = { id: uid(), label: targetLabel || `Target from ${startDate}`, startDate, endDate: endDate || null, includeWeekends, primary: primaryMacro, ...calc };
+    const newEntry = { id: uid(), label: targetLabel || `Target from ${startDate}`, startDate, endDate: endDate || null, activeDays: [...activeDays], primary: primaryMacro, ...calc };
     setTargetHistory(h => [...h, newEntry]);
     setCalcPreview(null);
     setTargetLabel("");
@@ -921,7 +1006,7 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
   }
 
   function handleSaveHabitSet() {
-    const newEntry = { id: uid(), label: habitLabel || `Habits from ${habitStartDate}`, startDate: habitStartDate, endDate: habitEndDate || null, habits: [...editHabits], includeWeekends: habitIncludeWeekends };
+    const newEntry = { id: uid(), label: habitLabel || `Habits from ${habitStartDate}`, startDate: habitStartDate, endDate: habitEndDate || null, habits: [...editHabits], activeDays: [...habitActiveDays] };
     setHabitHistory(h => [...h, newEntry]);
     setHabitLabel("");
     showToast("✓ Habit set saved");
@@ -945,16 +1030,23 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
         <div style={{ position: "relative", flexShrink: 0 }}>
           <button onClick={() => setShowDotMenu(v => !v)} style={{ width: 36, height: 36, borderRadius: 10, border: `1.5px solid ${C.border}`, background: C.card, cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center", color: C.muted }}>⋮</button>
           {showDotMenu && (
-            <div style={{ position: "absolute", right: 0, top: 42, background: C.card, borderRadius: 14, boxShadow: "0 8px 30px rgba(0,0,0,0.15)", border: `1px solid ${C.border}`, zIndex: 50, minWidth: 210, overflow: "hidden" }}>
-              <button onClick={() => { setShowHistoryModal("nutrition"); setShowDotMenu(false); }} style={{ width: "100%", padding: "13px 16px", background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.text, textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
-                <span>📊</span> Nutrition target history
-              </button>
-              <div style={{ height: 1, background: C.border }}/>
-              <button onClick={() => { setShowHistoryModal("habits"); setShowDotMenu(false); }} style={{ width: "100%", padding: "13px 16px", background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.text, textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
-                <span>✅</span> Habit set history
-              </button>
+            <div style={{ position: "absolute", right: 0, top: 42, background: C.card, borderRadius: 14, boxShadow: "0 8px 30px rgba(0,0,0,0.15)", border: `1px solid ${C.border}`, zIndex: 50, minWidth: 220, overflow: "hidden" }}>
+              {[
+                ["📊", "Nutrition target history", () => { setShowHistoryModal("nutrition"); setShowDotMenu(false); }],
+                ["✅", "Habit set history", () => { setShowHistoryModal("habits"); setShowDotMenu(false); }],
+                ["⬇️", "Export all data", () => { handleExport(); setShowDotMenu(false); }],
+                ["⬆️", "Import data", () => { handleImportClick(); setShowDotMenu(false); }],
+              ].map(([icon, label, fn], i, arr) => (
+                <div key={label}>
+                  <button onClick={fn} style={{ width: "100%", padding: "13px 16px", background: "none", border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontSize: 14, color: C.text, textAlign: "left", display: "flex", alignItems: "center", gap: 10 }}>
+                    <span>{icon}</span> {label}
+                  </button>
+                  {i < arr.length - 1 && <div style={{ height: 1, background: C.border }}/>}
+                </div>
+              ))}
             </div>
           )}
+          <input ref={importInputRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleImportFile}/>
         </div>
       </div>
 
@@ -1012,12 +1104,15 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
                 <button onClick={handleCalculate} disabled={!primaryValue} style={{ background: C.bg, color: C.accent, border: `1.5px solid ${C.accent}`, borderRadius: 11, padding: "11px 14px", fontFamily: "'DM Sans',sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: primaryValue ? 1 : 0.4 }}>Calculate</button>
               </div>
 
-              <button onClick={() => setIncludeWeekends(v => !v)} style={{ display: "flex", alignItems: "center", gap: 10, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 11, padding: "10px 13px", cursor: "pointer", width: "100%", marginBottom: 14 }}>
-                <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${includeWeekends ? C.accent : C.border}`, background: includeWeekends ? C.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {includeWeekends && <span style={{ color: "#fff", fontSize: 12 }}>✓</span>}
+              <div style={{ marginBottom: 14 }}>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: C.muted, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Active days</p>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {DAY_LABELS.map((label, i) => {
+                    const active = activeDays.includes(i);
+                    return <button key={i} onClick={() => setActiveDays(ds => active && ds.length > 1 ? ds.filter(d => d !== i) : ds.includes(i) ? ds : [...ds, i].sort())} style={{ flex: 1, padding: "7px 0", borderRadius: 8, border: `1.5px solid ${active ? C.accent : C.border}`, background: active ? C.accentLight : C.bg, fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: active ? 600 : 400, color: active ? C.accent : C.muted, cursor: "pointer" }}>{label}</button>;
+                  })}
                 </div>
-                <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.text }}>Include Saturday & Sunday</span>
-              </button>
+              </div>
 
               <button onClick={handleSaveTarget} disabled={!primaryValue} style={{ width: "100%", background: C.accent, color: "#fff", border: "none", borderRadius: 13, padding: "13px", fontFamily: "'DM Sans',sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer", opacity: primaryValue ? 1 : 0.4 }}>Save target</button>
             </div>
@@ -1056,12 +1151,15 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
                 <DateField label="End date (optional)" value={habitEndDate} onChange={setHabitEndDate} minDate={habitStartDate}/>
               </div>
 
-              <button onClick={() => setHabitIncludeWeekends(v => !v)} style={{ display: "flex", alignItems: "center", gap: 10, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 11, padding: "10px 13px", cursor: "pointer", width: "100%", marginBottom: 14 }}>
-                <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${habitIncludeWeekends ? C.accent : C.border}`, background: habitIncludeWeekends ? C.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {habitIncludeWeekends && <span style={{ color: "#fff", fontSize: 12 }}>✓</span>}
+              <div style={{ marginBottom: 14 }}>
+                <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: C.muted, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Active days</p>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {DAY_LABELS.map((label, i) => {
+                    const active = habitActiveDays.includes(i);
+                    return <button key={i} onClick={() => setHabitActiveDays(ds => active && ds.length > 1 ? ds.filter(d => d !== i) : ds.includes(i) ? ds : [...ds, i].sort())} style={{ flex: 1, padding: "7px 0", borderRadius: 8, border: `1.5px solid ${active ? C.accent : C.border}`, background: active ? C.accentLight : C.bg, fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: active ? 600 : 400, color: active ? C.accent : C.muted, cursor: "pointer" }}>{label}</button>;
+                  })}
                 </div>
-                <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.text }}>Include Saturday & Sunday</span>
-              </button>
+              </div>
 
               <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.muted, margin: "0 0 10px" }}>Drag ☰ to reorder · tap × to remove:</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
@@ -1175,10 +1273,11 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
                 [...targetHistory].reverse().map((t, i) => (
                   <div key={t.id} style={{ background: i === 0 ? C.accentLight : C.bg, borderRadius: 13, padding: "13px 14px", marginBottom: 10, border: `1px solid ${i === 0 ? C.accent + "33" : C.border}` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                      <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600, color: C.text }}>{t.label}</span>
-                      {i === 0 && <span style={{ fontSize: 10, fontFamily: "'DM Sans',sans-serif", color: C.accent, background: C.card, borderRadius: 8, padding: "2px 8px", fontWeight: 600 }}>Active</span>}
+                      <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600, color: C.text, flex: 1 }}>{t.label}</span>
+                      {i === 0 && <span style={{ fontSize: 10, fontFamily: "'DM Sans',sans-serif", color: C.accent, background: C.card, borderRadius: 8, padding: "2px 8px", fontWeight: 600, marginRight: 8 }}>Active</span>}
+                      {i !== 0 && <button onClick={() => setTargetHistory(h => h.filter(x => x.id !== t.id))} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 16, padding: "2px 4px" }}>×</button>}
                     </div>
-                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: C.muted, margin: "0 0 8px" }}>{t.startDate} → {t.endDate || "ongoing"} · {t.includeWeekends ? "incl. weekends" : "weekdays only"}</p>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: C.muted, margin: "0 0 8px" }}>{t.startDate} → {t.endDate || "ongoing"} · {(t.activeDays || ALL_DAYS).map(d => DAY_LABELS[d]).join(" ")}</p>
                     <div style={{ display: "flex", gap: 10 }}>
                       {Object.entries(MACRO_CONFIG).map(([k, cfg]) => (
                         <span key={k} style={{ fontSize: 12, color: cfg.color, fontFamily: "'DM Sans',sans-serif", fontWeight: t.primary === k ? 700 : 400 }}>{cfg.label}: {t[k]}{cfg.unit}{t.primary === k ? " ★" : ""}</span>
@@ -1192,10 +1291,11 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
                 [...habitHistory].reverse().map((h, i) => (
                   <div key={h.id} style={{ background: i === 0 ? C.accentLight : C.bg, borderRadius: 13, padding: "13px 14px", marginBottom: 10, border: `1px solid ${i === 0 ? C.accent + "33" : C.border}` }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                      <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600, color: C.text }}>{h.label}</span>
-                      {i === 0 && <span style={{ fontSize: 10, fontFamily: "'DM Sans',sans-serif", color: C.accent, background: C.card, borderRadius: 8, padding: "2px 8px", fontWeight: 600 }}>Active</span>}
+                      <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600, color: C.text, flex: 1 }}>{h.label}</span>
+                      {i === 0 && <span style={{ fontSize: 10, fontFamily: "'DM Sans',sans-serif", color: C.accent, background: C.card, borderRadius: 8, padding: "2px 8px", fontWeight: 600, marginRight: 8 }}>Active</span>}
+                      {i !== 0 && <button onClick={() => setHabitHistory(hs => hs.filter(x => x.id !== h.id))} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 16, padding: "2px 4px" }}>×</button>}
                     </div>
-                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: C.muted, margin: "0 0 8px" }}>{h.startDate} → {h.endDate || "ongoing"} · {h.habits.length} habits · {h.includeWeekends ? "incl. weekends" : "weekdays only"}</p>
+                    <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: C.muted, margin: "0 0 8px" }}>{h.startDate} → {h.endDate || "ongoing"} · {h.habits.length} habits · {(h.activeDays || ALL_DAYS).map(d => DAY_LABELS[d]).join(" ")}</p>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                       {h.habits.map(hb => <span key={hb} style={{ fontSize: 11, fontFamily: "'DM Sans',sans-serif", background: C.card, borderRadius: 7, padding: "2px 8px", color: C.text }}>{hb}</span>)}
                     </div>
