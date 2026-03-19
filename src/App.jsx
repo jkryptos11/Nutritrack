@@ -1,4 +1,4 @@
-// NutriTrack v8.7 - overflow-x + grid fix
+// NutriTrack v9.1 - audited + cleaned
 import { useState, useEffect, useRef } from "react";
 import { load, save } from './storage.js';
 import BarcodeScanner from './BarcodeScanner.jsx';
@@ -6,10 +6,10 @@ import BarcodeScanner from './BarcodeScanner.jsx';
 const FONT = `@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');`;
 
 const C = {
-  bg: "#F6F4EF", card: "#FFFFFF", text: "#1C1C1A", muted: "#9A9590",
-  accent: "#5C6B3A", accentLight: "#EDF0E4",
+  bg: "#F5F6FA", card: "#FFFFFF", text: "#1C1C1A", muted: "#9A9590",
+  accent: "#6B8CAE", accentLight: "#E4ECF4",
   kcal: "#C0692A", protein: "#3D405B", carbs: "#6B9E7A", fat: "#B8922A",
-  border: "#ECEAE4", danger: "#C0392B", dangerLight: "#FDECEA",
+  border: "#E4E8F0", danger: "#C0392B", dangerLight: "#FDECEA",
   green: "#2E7D52", amber: "#D97706", red: "#C0392B",
   greenBg: "#E8F5EE", amberBg: "#FEF3C7", redBg: "#FDECEA",
 };
@@ -19,8 +19,6 @@ function uid() { return `id-${Date.now()}-${Math.random().toString(36).slice(2, 
 function formatTime(ts) { if (!ts) return null; return new Date(ts).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", hour12: true }); }
 function formatDate(d) { return new Date(d + "T00:00:00").toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" }); }
 function toDateStr(date) { return date.toISOString().split("T")[0]; }
-function today() { return TODAY; }
-
 const TODAY = new Date().toISOString().split("T")[0];
 
 function getStatus(actual, target, higherIsBetter = false) {
@@ -93,28 +91,6 @@ function makeFreshDay() {
     ],
     habits: {}
   };
-}
-
-function seedData() {
-  const data = {};
-  const todayD = new Date(); todayD.setHours(0,0,0,0);
-  const past7 = Array.from({length:7},(_,i)=>{ const d=new Date(todayD); d.setDate(d.getDate()-(6-i)); return d.toISOString().split("T")[0]; });
-  past7.forEach((d, i) => {
-    const kcal = 1700 + Math.round(Math.random() * 600);
-    const protein = 80 + Math.round(Math.random() * 60);
-    data[d] = {
-      meals: [
-        { id: uid(), name: "Breakfast", loggedAt: new Date(d+"T08:00:00").getTime(), items: [{ id: uid(), name: "Breakfast", kcal: Math.round(kcal*0.25), protein: Math.round(protein*0.2), carbs: Math.round(kcal*0.25*0.45/4), fat: Math.round(kcal*0.25*0.3/9) }] },
-        { id: uid(), name: "Lunch", loggedAt: new Date(d+"T13:00:00").getTime(), items: [{ id: uid(), name: "Lunch", kcal: Math.round(kcal*0.35), protein: Math.round(protein*0.35), carbs: Math.round(kcal*0.35*0.45/4), fat: Math.round(kcal*0.35*0.3/9) }] },
-        { id: uid(), name: "Dinner", loggedAt: new Date(d+"T20:00:00").getTime(), items: [{ id: uid(), name: "Dinner", kcal: Math.round(kcal*0.30), protein: Math.round(protein*0.35), carbs: Math.round(kcal*0.30*0.45/4), fat: Math.round(kcal*0.30*0.3/9) }] },
-        { id: uid(), name: "Snack 1", loggedAt: null, items: [] },
-        { id: uid(), name: "Snack 2", loggedAt: null, items: [] },
-        { id: uid(), name: "Snack 3", loggedAt: null, items: [] },
-      ],
-      habits: Object.fromEntries(DEFAULT_HABITS.map(h => [h, Math.random() > 0.3]))
-    };
-  });
-  return data;
 }
 
 // ── Shared UI ──────────────────────────────────────────
@@ -245,78 +221,14 @@ function DateField({ label, value, onChange, minDate, maxDate }) {
       <label style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 10, color: C.muted, display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</label>
       <button onClick={() => setOpen(true)} style={{ width: "100%", padding: "10px 12px", borderRadius: 11, border: `1.5px solid ${C.border}`, background: C.bg, fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: value ? C.text : C.muted, cursor: "pointer", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span>{value || "Pick date"}</span>
-        <span style={{ fontSize: 14 }}>📅</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
       </button>
       {open && <CalendarPicker value={value} onChange={onChange} onClose={() => setOpen(false)} minDate={minDate} maxDate={maxDate}/>}
     </div>
   );
 }
 
-// ── Barcode Scanner ────────────────────────────────────
-function BarcodeModal({ onClose, onAdd }) {
-  const [phase, setPhase] = useState("scanning");
-  const [product] = useState({ name: "Yoga Bar Protein Bar (Choc Fudge)", kcal: 190, protein: 14, carbs: 22, fat: 6, servingSize: "60g" });
-  const [servings, setServings] = useState("1");
-  useEffect(() => { const t = setTimeout(() => setPhase("found"), 2500); return () => clearTimeout(t); }, []);
-  const sv = parseFloat(servings) || 1;
-  const scaled = { name: product.name, kcal: Math.round(product.kcal * sv), protein: Math.round(product.protein * sv), carbs: Math.round(product.carbs * sv), fat: Math.round(product.fat * sv) };
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
-      <div style={{ background: C.card, borderRadius: "24px 24px 0 0", width: "100%", padding: "20px 18px 32px", maxHeight: "88%", display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <span style={{ fontFamily: "'Lora',serif", fontSize: 18, color: C.text }}>Scan Barcode</span>
-          <button onClick={onClose} style={{ background: C.border, border: "none", borderRadius: 20, width: 30, height: 30, cursor: "pointer", fontSize: 16, color: C.muted }}>×</button>
-        </div>
-        {phase === "scanning" && (
-          <div>
-            <div style={{ background: "#111", borderRadius: 16, height: 200, position: "relative", overflow: "hidden", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <style>{`@keyframes scanline{0%{top:20%}100%{top:80%}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
-              <div style={{ position: "absolute", left: "10%", right: "10%", height: 2, background: "rgba(92,107,58,0.9)", animation: "scanline 1.5s ease-in-out infinite alternate", boxShadow: "0 0 8px rgba(92,107,58,0.6)" }}/>
-              {[[0,0],[0,1],[1,0],[1,1]].map(([r,c],i) => <div key={i} style={{ position:"absolute", top:r?"auto":"14%", bottom:r?"14%":"auto", left:c?"auto":"14%", right:c?"14%":"auto", width:24, height:24, borderTop:r?"none":`2px solid ${C.accent}`, borderBottom:r?`2px solid ${C.accent}`:"none", borderLeft:c?"none":`2px solid ${C.accent}`, borderRight:c?`2px solid ${C.accent}`:"none" }}/>)}
-              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: "rgba(255,255,255,0.5)", margin: 0, marginTop: 60 }}>Point at barcode — auto-scanning…</p>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              <div style={{ width: 8, height: 8, borderRadius: 4, background: C.accent, animation: "pulse 1s ease infinite" }}/>
-              <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.muted }}>Detecting barcode…</span>
-            </div>
-          </div>
-        )}
-        {phase === "found" && (
-          <div>
-            <div style={{ background: C.greenBg, border: `1px solid ${C.green}`, borderRadius: 12, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
-              <span>✓</span><span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.green, fontWeight: 500 }}>Product found!</span>
-            </div>
-            <div style={{ background: C.bg, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
-              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: 600, color: C.text, margin: "0 0 3px" }}>{product.name}</p>
-              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.muted, margin: "0 0 10px" }}>Per serving ({product.servingSize})</p>
-              <div style={{ display: "flex", gap: 10 }}>
-                <span style={{ fontSize: 12, color: C.kcal, fontWeight: 600 }}>{product.kcal} kcal</span>
-                <span style={{ fontSize: 12, color: C.protein }}>P {product.protein}g</span>
-                <span style={{ fontSize: 12, color: C.carbs }}>C {product.carbs}g</span>
-                <span style={{ fontSize: 12, color: C.fat }}>F {product.fat}g</span>
-              </div>
-            </div>
-            <label style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 12, color: C.muted, display: "block", marginBottom: 8 }}>Number of servings</label>
-            <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-              {["0.5","1","1.5","2"].map(s => <button key={s} onClick={() => setServings(s)} style={{ flex: 1, padding: "9px", border: `1.5px solid ${servings===s?C.accent:C.border}`, borderRadius: 10, background: servings===s?C.accentLight:C.bg, color: servings===s?C.accent:C.muted, fontFamily: "'DM Sans',sans-serif", fontSize: 14, fontWeight: servings===s?600:400, cursor: "pointer" }}>{s}</button>)}
-              <input type="number" value={servings} onChange={e => setServings(e.target.value)} placeholder="Own" style={{ flex: 1, padding: "9px", border: `1.5px solid ${C.border}`, borderRadius: 10, background: C.bg, fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.text, outline: "none", textAlign: "center" }}/>
-            </div>
-            <div style={{ background: C.accentLight, borderRadius: 11, padding: "10px 14px", marginBottom: 14 }}>
-              <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, color: C.accent, margin: "0 0 5px", fontWeight: 600 }}>Total for {servings} serving{sv !== 1 ? "s" : ""}</p>
-              <div style={{ display: "flex", gap: 12 }}>
-                <span style={{ fontSize: 13, color: C.kcal, fontWeight: 700 }}>{scaled.kcal} kcal</span>
-                <span style={{ fontSize: 13, color: C.protein, fontWeight: 600 }}>P {scaled.protein}g</span>
-                <span style={{ fontSize: 13, color: C.carbs }}>C {scaled.carbs}g</span>
-                <span style={{ fontSize: 13, color: C.fat }}>F {scaled.fat}g</span>
-              </div>
-            </div>
-            <button onClick={() => { onAdd([scaled], {}); onClose(); }} style={{ width: "100%", background: C.accent, color: "#fff", border: "none", borderRadius: 13, padding: "14px", fontFamily: "'DM Sans',sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Add to meal</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+// ── Barcode Scanner (BarcodeScanner.jsx) ─────────────
 
 // ── Add Item Modal (AI Search + Saved + Scan) ──────────
 function AddItemModal({ mealName, onClose, onAdd, favourites, customItems }) {
@@ -562,7 +474,12 @@ function LogTab({ data, activeDate, setActiveDate, onDataChange, favourites, cus
           })}
         </div>
         {/* Calendar icon for any date */}
-        <button onClick={() => setShowCalendar(true)} title="Jump to any date" style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 12, border: `1.5px solid ${C.border}`, background: C.card, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>📅</button>
+        <button onClick={() => setShowCalendar(true)} title="Jump to any date" style={{ flexShrink: 0, width: 38, height: 38, borderRadius: 12, border: `1.5px solid ${C.border}`, background: C.card, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="3"/>
+            <path d="M16 2v4M8 2v4M3 10h18"/>
+          </svg>
+        </button>
       </div>
 
       {/* Target vs actual banner */}
@@ -599,7 +516,7 @@ function LogTab({ data, activeDate, setActiveDate, onDataChange, favourites, cus
 
 // ── Home Tab ───────────────────────────────────────────
 function HomeTab({ data, date, onNavigate, habitHistory, onToggleHabit, targetHistory }) {
-  const dayData = data[date] || makeFreshDay();
+  const dayData = data[date] || { meals: [], habits: {} };
   const meals = dayData.meals;
   const all = meals.flatMap(m => m.items);
   const kcal = sum(all,"kcal"), protein = sum(all,"protein"), carbs = sum(all,"carbs"), fat = sum(all,"fat");
@@ -628,7 +545,9 @@ function HomeTab({ data, date, onNavigate, habitHistory, onToggleHabit, targetHi
       {/* Ring + macro bars */}
       <div style={{ background: C.card, borderRadius: 20, padding: "18px 16px", marginBottom: 12, border: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 16 }}>
-          <Ring value={kcal} max={activeTarget?.kcal || 2000} size={108} stroke={10} color={statusColor(kcalStatus)} label={kcal} sublabel="kcal"/>
+          <Ring value={kcal} max={activeTarget?.kcal || 2000} size={108} stroke={10}
+            color={(() => { if (!activeTarget) return statusColor(kcalStatus); const pk = activeTarget.primary || "kcal"; const pv = pk==="kcal"?kcal:pk==="protein"?protein:pk==="carbs"?carbs:fat; const phib = pk==="protein"; return statusColor(getStatus(pv, activeTarget[pk], phib)); })()}
+            label={kcal} sublabel="kcal"/>
           <div style={{ flex: 1 }}>
             <p style={{ fontFamily: "'Lora',serif", fontSize: 14, color: C.text, margin: "0 0 12px" }}>Today's nutrition</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
@@ -751,14 +670,19 @@ function ProgressTab({ data, targetHistory, habitHistory }) {
             const dateStr = `${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
             const dayData = data[dateStr];
             const all = dayData ? dayData.meals.flatMap(m => m.items) : [];
-            const kcal = sum(all, "kcal");
             const tgt = getTargetForDay(dateStr);
-            const status = kcal > 0 && tgt ? getStatus(kcal, tgt.kcal, false) : null;
+            // Use primary macro for status colour (change 12)
+            const primaryKey = tgt?.primary || "kcal";
+            const primaryVal = sum(all, primaryKey);
+            const primaryHib = primaryKey === "protein";
+            const hasData = all.length > 0;
+            const status = hasData && tgt ? getStatus(primaryVal, tgt[primaryKey], primaryHib) : null;
             const isSelected = selectedDay === dateStr, isToday = dateStr === TODAY;
+            const barColor = status ? statusColor(status) : "transparent";
             return (
-              <button key={i} onClick={() => setSelectedDay(isSelected ? null : dateStr)} style={{ aspectRatio: "1", borderRadius: 8, border: `${isToday ? "2px" : "1px"} solid ${isSelected ? C.accent : isToday ? C.accent : C.border}`, background: status ? statusBg(status) : C.card, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 1 }}>
+              <button key={i} onClick={() => setSelectedDay(isSelected ? null : dateStr)} style={{ aspectRatio: "1", borderRadius: 8, border: `${isToday ? "2px" : "1px"} solid ${isSelected ? C.accent : isToday ? C.accent : C.border}`, background: C.card, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 2, overflow: "hidden", position: "relative" }}>
                 <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 11, fontWeight: isToday ? 700 : 400, color: isSelected ? C.accent : C.text }}>{d}</span>
-                {status && <div style={{ width: 5, height: 5, borderRadius: 3, background: statusColor(status) }}/>}
+                <div style={{ width: "80%", height: 3, borderRadius: 2, background: status ? barColor : hasData ? C.border : "transparent" }}/>
               </button>
             );
           })}
@@ -797,6 +721,7 @@ function ProgressTab({ data, targetHistory, habitHistory }) {
 
   function BarChart({ period }) {
     const chartDays = period === "weekly" ? days.slice(-7) : days;
+    if (chartDays.length === 0) return <div style={{ background: C.card, borderRadius: 14, padding: "28px", textAlign: "center", border: `1px solid ${C.border}` }}><p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 13, color: C.muted }}>No data yet</p></div>;
     const maxKcal = Math.max(...chartDays.map(d => sum(data[d].meals.flatMap(m => m.items), "kcal")), 1);
     return (
       <div style={{ background: C.card, borderRadius: 14, padding: "14px", border: `1px solid ${C.border}`, marginBottom: 12 }}>
@@ -808,7 +733,7 @@ function ProgressTab({ data, targetHistory, habitHistory }) {
             const st = tgt ? getStatus(kcal, tgt.kcal, false) : "neutral";
             return <div key={d} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
               <div style={{ width: "100%", background: statusColor(st), borderRadius: "3px 3px 1px 1px", height: kcal ? `${Math.max(4, (kcal / maxKcal) * 72)}px` : 3, opacity: kcal ? 1 : 0.2 }}/>
-              <span style={{ fontSize: 8, color: C.muted, fontFamily: "'DM Sans',sans-serif" }}>{new Date(d+"T00:00:00").toLocaleDateString("en",{weekday:"short"})}</span>
+              <span style={{ fontSize: 8, color: C.muted, fontFamily: "'DM Sans',sans-serif" }}>{period==="weekly" ? new Date(d+"T00:00:00").toLocaleDateString("en",{weekday:"short"}) : new Date(d+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"})}</span>
             </div>;
           })}
         </div>
@@ -849,7 +774,7 @@ function ProgressTab({ data, targetHistory, habitHistory }) {
                 <div style={{ width: "100%", aspectRatio: "1", borderRadius: 8, background: pct > 0 ? color + "22" : C.border, border: `1px solid ${pct > 0 ? color : C.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <span style={{ fontFamily: "'DM Sans',sans-serif", fontSize: 10, fontWeight: 600, color: pct > 0 ? color : C.muted }}>{Math.round(pct * 100)}%</span>
                 </div>
-                <span style={{ fontSize: 8, color: C.muted, fontFamily: "'DM Sans',sans-serif" }}>{new Date(d+"T00:00:00").toLocaleDateString("en",{weekday:"short"})}</span>
+                <span style={{ fontSize: 8, color: C.muted, fontFamily: "'DM Sans',sans-serif" }}>{period==="weekly" ? new Date(d+"T00:00:00").toLocaleDateString("en",{weekday:"short"}) : new Date(d+"T00:00:00").toLocaleDateString("en",{month:"short",day:"numeric"})}</span>
               </div>;
             })}
           </div>
@@ -913,6 +838,9 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
     setCalcPreview(calc);
   }
 
+  const [savedToast, setSavedToast] = useState(null);
+  function showToast(msg) { setSavedToast(msg); setTimeout(() => setSavedToast(null), 2500); }
+
   function handleSaveTarget() {
     if (!calcPreview && !primaryValue) return;
     const calc = calcPreview || calcTargets(primaryMacro, primaryValue);
@@ -920,18 +848,23 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
     setTargetHistory(h => [...h, newEntry]);
     setCalcPreview(null);
     setTargetLabel("");
+    showToast("✓ Target saved");
   }
 
   function handleSaveHabitSet() {
     const newEntry = { id: uid(), label: habitLabel || `Habits from ${habitStartDate}`, startDate: habitStartDate, endDate: habitEndDate || null, habits: [...editHabits], includeWeekends: habitIncludeWeekends };
     setHabitHistory(h => [...h, newEntry]);
     setHabitLabel("");
+    showToast("✓ Habit set saved");
   }
 
   const sections = [["targets","Targets"],["habits","Habits"],["custom","Custom Meals"],["favs","Favourites"]];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", position: "relative", width: "100%" }}>
+      {savedToast && (
+        <div style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", background: C.green, color: "#fff", borderRadius: 20, padding: "9px 22px", fontFamily: "'DM Sans',sans-serif", fontSize: 13, fontWeight: 600, zIndex: 300, boxShadow: "0 4px 20px rgba(0,0,0,0.15)", whiteSpace: "nowrap" }}>{savedToast}</div>
+      )}
       {/* Section tabs + 3-dot menu */}
       <div style={{ display: "flex", alignItems: "center", padding: "0 14px 12px", gap: 6, flexShrink: 0, background: C.bg, zIndex: 10, width: "100%" }}>
         <div style={{ display: "flex", gap: 5, overflowX: "auto", flex: 1, paddingBottom: 2, WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none" }}>
@@ -1208,7 +1141,7 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
   );
 }
 
-function CreateCustomForm({ onSave }) {
+function CreateCustomForm({ onSave, onCancel }) {
   const [name, setName] = useState("");
   const [macros, setMacros] = useState({ kcal: "", protein: "", carbs: "", fat: "" });
   const fields = [{ key:"kcal", label:"Kcal", color:C.kcal },{ key:"protein", label:"Protein (g)", color:C.protein },{ key:"carbs", label:"Carbs (g)", color:C.carbs },{ key:"fat", label:"Fat (g)", color:C.fat }];
@@ -1259,9 +1192,6 @@ export default function App() {
     });
   }
 
-  const activeTarget = getActiveTarget(targetHistory, TODAY);
-  const activeHabitSet = getActiveHabitSet(habitHistory, TODAY);
-
   const tabs = [
     { id: "home", label: "Home", icon: a => <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M3 9.5L11 3l8 6.5V19a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z" stroke={a?C.accent:C.muted} strokeWidth="1.5" fill={a?C.accentLight:"none"}/><path d="M8 20v-7h6v7" stroke={a?C.accent:C.muted} strokeWidth="1.5" strokeLinecap="round"/></svg> },
     { id: "log", label: "Log", icon: a => <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="4" width="16" height="15" rx="3" stroke={a?C.accent:C.muted} strokeWidth="1.5"/><path d="M7 2v4M15 2v4M3 9h16" stroke={a?C.accent:C.muted} strokeWidth="1.5" strokeLinecap="round"/><path d="M7 13h3M7 16h8M13 13l1 1 2-2" stroke={a?C.accent:C.muted} strokeWidth="1.3" strokeLinecap="round"/></svg> },
@@ -1274,8 +1204,8 @@ export default function App() {
       <style>{FONT}</style>
       <div style={{ display: "flex", flexDirection: "column", height: "100%", background: C.bg, position: "relative", maxWidth: 480, margin: "0 auto", overflow: "hidden", width: "100%" }}>
           <div style={{ padding: "calc(env(safe-area-inset-top, 0px) + 16px) 18px 6px", flexShrink: 0, background: C.bg, zIndex: 1 }}>
-            {tab === "home" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{new Date().toLocaleDateString("en",{weekday:"long",month:"short",day:"numeric"})}</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Good morning 👋</p></>}
-            {tab === "log" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Meal Log</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>{activeDate === TODAY ? "Today" : formatDate(activeDate)}</p></>}
+            {tab === "home" && (() => { const h = new Date().getHours(); const g = h < 12 ? "Good morning 🌅" : h < 17 ? "Good afternoon ☀️" : "Good evening 🌙"; return <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{new Date().toLocaleDateString("en",{weekday:"long",month:"short",day:"numeric"})}</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>{g}</p></>; })()}
+            {tab === "log" && <><p style={{ fontFamily: "'Lora',serif", fontSize: 11, color: C.muted, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.08em" }}>{activeDate === TODAY ? "Today" : formatDate(activeDate)}</p><p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Meal Log</p></>}
             {tab === "progress" && <p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Progress</p>}
             {tab === "hub" && <p style={{ fontFamily: "'Lora',serif", fontSize: 24, color: C.text, margin: 0, fontWeight: 500 }}>Hub</p>}
           </div>
