@@ -1,4 +1,4 @@
-// NutriTrack v9.4 - fonts + theme colour
+// NutriTrack v9.5 - target fixes
 import { useState, useEffect, useRef } from "react";
 import { load, save } from './storage.js';
 import BarcodeScanner from './BarcodeScanner.jsx';
@@ -60,17 +60,26 @@ function calcTargets(primary, value) {
 // Get active target for a given date from target history
 function getActiveTarget(targetHistory, dateStr) {
   if (!targetHistory || targetHistory.length === 0) return null;
-  const applicable = targetHistory
+  // Sort by startDate desc, then by original index desc (later entry wins on tie)
+  const withIndex = targetHistory.map((t, i) => ({ ...t, _idx: i }));
+  const applicable = withIndex
     .filter(t => t.startDate <= dateStr)
-    .sort((a, b) => b.startDate.localeCompare(a.startDate));
+    .sort((a, b) => {
+      const dateDiff = b.startDate.localeCompare(a.startDate);
+      return dateDiff !== 0 ? dateDiff : b._idx - a._idx;
+    });
   return applicable[0] || null;
 }
 
 function getActiveHabitSet(habitHistory, dateStr) {
   if (!habitHistory || habitHistory.length === 0) return { habits: [] };
-  const applicable = habitHistory
+  const withIndex = habitHistory.map((t, i) => ({ ...t, _idx: i }));
+  const applicable = withIndex
     .filter(t => t.startDate <= dateStr)
-    .sort((a, b) => b.startDate.localeCompare(a.startDate));
+    .sort((a, b) => {
+      const dateDiff = b.startDate.localeCompare(a.startDate);
+      return dateDiff !== 0 ? dateDiff : b._idx - a._idx;
+    });
   return applicable[0] || { habits: [] };
 }
 
@@ -919,7 +928,9 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
   const [section, setSection] = useState("targets");
   const [showCreate, setShowCreate] = useState(false);
   const [showDotMenu, setShowDotMenu] = useState(false);
-  const [showHistoryModal, setShowHistoryModal] = useState(null); // "nutrition" | "habits"
+  const [showHistoryModal, setShowHistoryModal] = useState(null);
+  const [showTargetForm, setShowTargetForm] = useState(false);
+  const [showHabitForm, setShowHabitForm] = useState(false);
   const [newHabit, setNewHabit] = useState("");
 
   // Nutrition target form state
@@ -1002,6 +1013,11 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
     setTargetHistory(h => [...h, newEntry]);
     setCalcPreview(null);
     setTargetLabel("");
+    setStartDate(TODAY);
+    setEndDate("");
+    setPrimaryValue("");
+    setActiveDays([...ALL_DAYS]);
+    setShowTargetForm(false);
     showToast("✓ Target saved");
   }
 
@@ -1009,6 +1025,10 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
     const newEntry = { id: uid(), label: habitLabel || `Habits from ${habitStartDate}`, startDate: habitStartDate, endDate: habitEndDate || null, habits: [...editHabits], activeDays: [...habitActiveDays] };
     setHabitHistory(h => [...h, newEntry]);
     setHabitLabel("");
+    setHabitStartDate(TODAY);
+    setHabitEndDate("");
+    setHabitActiveDays([...ALL_DAYS]);
+    setShowHabitForm(false);
     showToast("✓ Habit set saved");
   }
 
@@ -1055,28 +1075,36 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
         {section === "targets" && (
           <div>
             {/* Active target preview */}
-            {targetHistory.length > 0 && (() => {
+            {(() => {
               const active = getActiveTarget(targetHistory, TODAY);
               return active ? (
                 <div style={{ background: C.accentLight, borderRadius: 14, padding: "13px 14px", marginBottom: 16, border: `1px solid ${C.accent}22` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <p style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 14, color: C.accent, margin: 0 }}>{active.label}</p>
-                    <span style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 10, color: C.accent, background: C.card, borderRadius: 8, padding: "3px 8px", fontWeight: 600 }}>Active</span>
+                    <p style={{ fontSize: 14, color: C.accent, margin: 0, fontWeight: 600 }}>{active.label}</p>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ fontSize: 10, color: C.accent, background: C.card, borderRadius: 8, padding: "3px 8px", fontWeight: 600 }}>Active</span>
+                      <button onClick={() => { if (targetHistory.length > 1) setTargetHistory(h => h.filter(x => x.id !== active.id)); else showToast("Cannot delete the only target"); }} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 16, padding: "2px 4px" }}>×</button>
+                    </div>
                   </div>
-                  <p style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 11, color: C.muted, margin: "0 0 8px" }}>{active.startDate} → {active.endDate || "ongoing"}</p>
+                  <p style={{ fontSize: 11, color: C.muted, margin: "0 0 8px" }}>{active.startDate} → {active.endDate || "ongoing"}</p>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
                     {Object.entries(MACRO_CONFIG).map(([k, cfg]) => (
                       <div key={k} style={{ textAlign: "center" }}>
-                        <p style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 14, fontWeight: 700, color: cfg.color, margin: 0 }}>{active[k]}{cfg.unit}</p>
-                        <p style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 9, color: C.muted, margin: "2px 0 0", textTransform: "uppercase" }}>{cfg.label}{active.primary === k ? " ★" : ""}</p>
+                        <p style={{ fontSize: 14, fontWeight: 700, color: cfg.color, margin: 0 }}>{active[k]}{cfg.unit}</p>
+                        <p style={{ fontSize: 9, color: C.muted, margin: "2px 0 0", textTransform: "uppercase" }}>{cfg.label}{active.primary === k ? " ★" : ""}</p>
                       </div>
                     ))}
                   </div>
                 </div>
-              ) : null;
+              ) : <div style={{ background: C.bg, borderRadius: 14, padding: "16px", marginBottom: 16, textAlign: "center", border: `1.5px dashed ${C.border}` }}><p style={{ fontSize: 13, color: C.muted, margin: 0 }}>No active target</p></div>;
             })()}
 
-            <div style={{ background: C.card, borderRadius: 16, padding: "16px", border: `1px solid ${C.border}`, marginBottom: 14 }}>
+            {/* Toggle form */}
+            <button onClick={() => setShowTargetForm(v => !v)} style={{ width: "100%", background: showTargetForm ? C.bg : C.accent, color: showTargetForm ? C.accent : "#fff", border: `1.5px solid ${C.accent}`, borderRadius: 13, padding: "12px", fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              {showTargetForm ? "↑ Cancel" : "+ Set new target"}
+            </button>
+
+            {showTargetForm && <div style={{ background: C.card, borderRadius: 16, padding: "16px", border: `1px solid ${C.border}`, marginBottom: 14 }}>
               <p style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 16, color: C.text, margin: "0 0 4px" }}>Set new nutrition target</p>
               <p style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 12, color: C.muted, margin: "0 0 14px" }}>Pick your primary goal — other values auto-calculate</p>
 
@@ -1114,32 +1142,40 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
                 </div>
               </div>
 
-              <button onClick={handleSaveTarget} disabled={!primaryValue} style={{ width: "100%", background: C.accent, color: "#fff", border: "none", borderRadius: 13, padding: "13px", fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer", opacity: primaryValue ? 1 : 0.4 }}>Save target</button>
-            </div>
+              <button onClick={handleSaveTarget} disabled={!primaryValue} style={{ width: "100%", background: C.accent, color: "#fff", border: "none", borderRadius: 13, padding: "13px", fontSize: 15, fontWeight: 600, cursor: "pointer", opacity: primaryValue ? 1 : 0.4 }}>Save target</button>
+            </div>}
           </div>
         )}
 
         {/* ── Habits section ── */}
+        {/* ── Habits section ── */}
         {section === "habits" && (
           <div>
-            {habitHistory.length > 0 && (() => {
+            {(() => {
               const active = getActiveHabitSet(habitHistory, TODAY);
-              return active ? (
+              return active && active.habits.length > 0 ? (
                 <div style={{ background: C.accentLight, borderRadius: 14, padding: "13px 14px", marginBottom: 16, border: `1px solid ${C.accent}22` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <p style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 14, color: C.accent, margin: 0 }}>{active.label}</p>
-                    <span style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 10, color: C.accent, background: C.card, borderRadius: 8, padding: "3px 8px", fontWeight: 600 }}>Active</span>
+                    <p style={{ fontSize: 14, color: C.accent, margin: 0, fontWeight: 600 }}>{active.label}</p>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <span style={{ fontSize: 10, color: C.accent, background: C.card, borderRadius: 8, padding: "3px 8px", fontWeight: 600 }}>Active</span>
+                      <button onClick={() => { if (habitHistory.length > 1) setHabitHistory(h => h.filter(x => x.id !== active.id)); else showToast("Cannot delete the only habit set"); }} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 16, padding: "2px 4px" }}>×</button>
+                    </div>
                   </div>
-                  <p style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 11, color: C.muted, margin: "0 0 8px" }}>{active.startDate} → {active.endDate || "ongoing"} · {active.habits.length} habits</p>
+                  <p style={{ fontSize: 11, color: C.muted, margin: "0 0 8px" }}>{active.startDate} → {active.endDate || "ongoing"} · {active.habits.length} habits</p>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                    {active.habits.slice(0, 6).map(h => <span key={h} style={{ fontSize: 11, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", background: C.card, borderRadius: 8, padding: "3px 8px", color: C.accent }}>{h}</span>)}
-                    {active.habits.length > 6 && <span style={{ fontSize: 11, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", color: C.muted }}>+{active.habits.length - 6} more</span>}
+                    {active.habits.slice(0, 6).map(h => <span key={h} style={{ fontSize: 11, background: C.card, borderRadius: 8, padding: "3px 8px", color: C.accent }}>{h}</span>)}
+                    {active.habits.length > 6 && <span style={{ fontSize: 11, color: C.muted }}>+{active.habits.length - 6} more</span>}
                   </div>
                 </div>
-              ) : null;
+              ) : <div style={{ background: C.bg, borderRadius: 14, padding: "16px", marginBottom: 16, textAlign: "center", border: `1.5px dashed ${C.border}` }}><p style={{ fontSize: 13, color: C.muted, margin: 0 }}>No active habit set</p></div>;
             })()}
 
-            <div style={{ background: C.card, borderRadius: 16, padding: "16px", border: `1px solid ${C.border}` }}>
+            <button onClick={() => setShowHabitForm(v => !v)} style={{ width: "100%", background: showHabitForm ? C.bg : C.accent, color: showHabitForm ? C.accent : "#fff", border: `1.5px solid ${C.accent}`, borderRadius: 13, padding: "12px", fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              {showHabitForm ? "↑ Cancel" : "+ Set new habit list"}
+            </button>
+
+            {showHabitForm && <div style={{ background: C.card, borderRadius: 16, padding: "16px", border: `1px solid ${C.border}` }}>
               <p style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 16, color: C.text, margin: "0 0 4px" }}>Set new habit list</p>
               <p style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 12, color: C.muted, margin: "0 0 14px" }}>Define habits with a date range</p>
 
@@ -1195,7 +1231,9 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
               </div>
               <button onClick={handleSaveHabitSet} style={{ width: "100%", background: C.accent, color: "#fff", border: "none", borderRadius: 13, padding: "13px", fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Save habit set</button>
             </div>
+            </div>}
           </div>
+        )}
         )}
 
         {/* ── Custom Meals ── */}
