@@ -1230,10 +1230,8 @@ function HubTab({ targetHistory, setTargetHistory, habitHistory, setHabitHistory
                 <button onClick={() => { if (newHabit.trim()) { setEditHabits(hs => [...hs, newHabit.trim()]); setNewHabit(""); }}} disabled={!newHabit.trim()} style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 11, padding: "10px 14px", fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 13, fontWeight: 500, cursor: "pointer", opacity: newHabit.trim() ? 1 : 0.4 }}>Add</button>
               </div>
               <button onClick={handleSaveHabitSet} style={{ width: "100%", background: C.accent, color: "#fff", border: "none", borderRadius: 13, padding: "13px", fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Save habit set</button>
-            </div>
             </div>}
           </div>
-        )}
         )}
 
         {/* ── Custom Meals ── */}
